@@ -112,50 +112,50 @@ which explains better an example like (*for producer body*), where we loop over 
 
 Similarly we have “feed”, that fills all the awaits this time with a given source.
 
-    ($>~) :: Monad m => Proxy a' a y' y m b -> Proxy () b y' y m c 
-                   -> Proxy a' a y' y m c
+        (>~) :: Monad m => Proxy a' a y' y m b -> Proxy () b y' y m c 
+                       -> Proxy a' a y' y m c
 
-e.g. (draw >∼ p): loops over *p* replacing each *await* with *draw*.
+    e.g. (draw >∼ p): loops over *p* replacing each *await* with *draw*.
 
-    (>->) :: Monad m => Proxy a' a () b m r -> Proxy () b c' c m r 
-                     -> Proxy a' a c' c m r
+        (>->) :: Monad m => Proxy a' a () b m r -> Proxy () b c' c m r 
+                         -> Proxy a' a c' c m r
 
-Which can be used to compose Pipes, similarly to the Unix pipe operator. Next we’ll see a basic example composed by mixing various examples in the pipes’ tutorial , a simple main that gets strings from standard input, maps them to lower case and then prints them to standard output, showing the implementations of some parts of Pipes.Prelude.
+    Which can be used to compose Pipes, similarly to the Unix pipe operator. Next we’ll see a basic example composed by mixing various examples in the pipes’ tutorial , a simple main that gets strings from standard input, maps them to lower case and then prints them to standard output, showing the implementations of some parts of Pipes.Prelude.
 
-    import Pipes
-    import Data.Text
+        import Pipes
+        import Data.Text
 
-    stdinLn :: Producer String IO ()            -- as defined in Pipes.Prelude
-    stdinLn = do 
-        eof <- lift isEOF        -- 'lift' an 'IO' action from the base monad
-        unless eof $ do
-            str <- lift getLine
-            yield str            -- 'yield' the 'String'
-            stdinLn              -- Loop
+        stdinLn :: Producer String IO ()            -- as defined in Pipes.Prelude
+        stdinLn = do 
+            eof <- lift isEOF        -- 'lift' an 'IO' action from the base monad
+            unless eof $ do
+                str <- lift getLine
+                yield str            -- 'yield' the 'String'
+                stdinLn              -- Loop
 
-    stdoutLn :: Consumer String IO ()           -- as defined in Pipes.Prelude
-    stdoutLn = do
-        str <- await                     -- 'await' a 'String'
-        x   <- lift $ try $ putStrLn str
-        case x of
-            -- Gracefully terminate if we got a broken pipe error
-            Left e@(G.IOError { G.ioe_type = t}) ->
-                lift $ unless (t == G.ResourceVanished) $ throwIO e
-            -- Otherwise loop
-            Right () -> stdoutLn
-    -- forever :: Applicative f => f a -> f b  
-    -- from Control.Monad
+        stdoutLn :: Consumer String IO ()           -- as defined in Pipes.Prelude
+        stdoutLn = do
+            str <- await                     -- 'await' a 'String'
+            x   <- lift $ try $ putStrLn str
+            case x of
+                -- Gracefully terminate if we got a broken pipe error
+                Left e@(G.IOError { G.ioe_type = t}) ->
+                    lift $ unless (t == G.ResourceVanished) $ throwIO e
+                -- Otherwise loop
+                Right () -> stdoutLn
+        -- forever :: Applicative f => f a -> f b  
+        -- from Control.Monad
 
-    map' f = forever $ do                       -- as defined in Pipes.Prelude
-        x <- await
-        yield (f x)
+        map' f = forever $ do                       -- as defined in Pipes.Prelude
+            x <- await
+            yield (f x)
 
-When all the *awaits* and *yield* have been handled, the resulting Proxy can be run, removing the lifts and returning the underlying base monad.
+    When all the *awaits* and *yield* have been handled, the resulting Proxy can be run, removing the lifts and returning the underlying base monad.
 
-    main :: IO ()
-    main = runEffect $ stdinLn >-> 
-                    map' (unpack . toLower . pack) >->  -- pack :: String -> Text,
-                                                  -- unpack :: Text -> String viceversa
-                    stdoutLn
+        main :: IO ()
+        main = runEffect $ stdinLn >-> 
+                        map' (unpack . toLower . pack) >->  -- pack :: String -> Text,
+                                                      -- unpack :: Text -> String viceversa
+                        stdoutLn
 
-Applying a monad transformer to a monad returns a monad, as we already said, so obviously results can be composed using the usual *bind* operator (>>=).
+    Applying a monad transformer to a monad returns a monad, as we already said, so obviously results can be composed using the usual *bind* operator (>>=).
