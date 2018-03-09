@@ -45,9 +45,7 @@ Concrete type synonyms
 
 Pipes offers many concrete type synonyms for ’Proxy’ specializing further its more generic signature. Defined X the empty type, used to close output ends.
 
-### 
-
-<span>Effect</span>
+### Effect
 
     -- Defined in ‘Pipes.Core’
     type Effect = Proxy X () () X :: (* -> *) -> * -> * 
@@ -56,25 +54,19 @@ Which represents an effect in the base monad, modeling a non-streaming component
 
     runEffect :: Monad m => Effect m r -> m r 
 
-### 
-
-<span>Producer</span>
+### Producer
 
     type Producer b = Proxy X () () b :: (* -> *) -> * -> *
 
 Representing a Proxy producing *b* downstream, models a streaming source.
 
-### 
-
-<span>Consumer</span>
+### Consumer
 
     type Consumer a = Proxy () a () X :: (* -> *) -> * -> *
 
 Representing a Proxy consuming *a* from upstream, models a streaming sink.
 
-### 
-
-<span>Pipe</span>
+### Pipe
 
     type Pipe a b = Proxy () a () b :: (* -> *) -> * -> *
 
@@ -166,4 +158,4 @@ When all the *awaits* and *yield* have been handled, the resulting Proxy can be 
                                                   -- unpack :: Text -> String viceversa
                     stdoutLn
 
-Applying a monad transformer to a monad returns a monad, as we already said, so obviously results can be composed using the usual *bind* operator &gt; &gt; =.
+Applying a monad transformer to a monad returns a monad, as we already said, so obviously results can be composed using the usual *bind* operator (>>=).
