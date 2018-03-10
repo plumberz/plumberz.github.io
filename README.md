@@ -17,7 +17,10 @@
     * [Polymorphic synonyms](#polymorphic-synonyms)
     * [Communication](#communication)
     * [Composition](#composition)
-
+  * [Tubes](#tubes)
+  * [Comparison](#comparison)
+  * [Windowed Wordcount with Pipes](#windowed-wordcount-with-pipes)
+  
 # Intro
 Research conducted by Luca Lodi and Philippe Scorsolini for the course of "Principles of Programming Languages" at Politecnico di Milano by Professor Pradella Matteo and with the supervision of Riccardo Tommasini.
 
