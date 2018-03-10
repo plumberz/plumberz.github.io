@@ -137,7 +137,7 @@ Similarly we have “feed”, that fills all the awaits this time with a given s
 ```haskell
 (>~) :: Monad m => Proxy a' a y' y m b -> Proxy () b y' y m c 
                -> Proxy a' a y' y m c
-
+```
 e.g. (draw >∼ p): loops over *p* replacing each *await* with *draw*.
 ```haskell
 (>->) :: Monad m => Proxy a' a () b m r -> Proxy () b c' c m r 
