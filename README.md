@@ -147,7 +147,7 @@ Similarly we have “feed”, that fills all the awaits this time with a given s
         (>->) :: Monad m => Proxy a' a () b m r -> Proxy () b c' c m r 
                          -> Proxy a' a c' c m r
 
-    Which can be used to compose Pipes, similarly to the Unix pipe operator. Next we’ll see a basic example composed by mixing various examples in the pipes’ tutorial , a simple main that gets strings from standard input, maps them to lower case and then prints them to standard output, showing the implementations of some parts of Pipes.Prelude.
+Which can be used to compose Pipes, similarly to the Unix pipe operator. Next we’ll see a basic example composed by mixing various examples in the pipes’ tutorial , a simple main that gets strings from standard input, maps them to lower case and then prints them to standard output, showing the implementations of some parts of Pipes.Prelude.
 
         import Pipes
         import Data.Text
