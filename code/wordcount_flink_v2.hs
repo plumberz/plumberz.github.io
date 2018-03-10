@@ -6,7 +6,7 @@ import Pipes
 import Data.HashMap.Strict
 import Data.List.Split
 import Wordcount (r2s)
--- asynchronous version that does not output if the main thread has ended
+-- Asynchronous version that does not output if the main thread has ended
 -- By unifying the windowing and the counting we achieve a considerable performance boost,
 
 main :: IO ()
@@ -29,6 +29,3 @@ wordcount' e v = do
     s' <- lift $ takeMVar v
     lift $ putMVar v $ insertWith (+) x 1 s'
     wordcount' e v
---
--- si può fare stream processing? no, è stream programming
---

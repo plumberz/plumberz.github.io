@@ -20,7 +20,7 @@ main = do
                     P.map (splitOn " ") >-> 
                     r2s >->
                     window 5 >-> 
-                    P.map toList >-> r2s >-> P.map show >-> P.stdoutLn
+                    r2s >-> P.map show >-> P.stdoutLn
 
 
 window w = do 
@@ -33,5 +33,5 @@ window w = do
             if diff <= w
                 then loop w last $! insertWith (+) el 1 s
                 else do
-                    yield s
+                    yield $ toList s
                     loop w x empty

@@ -26,15 +26,9 @@ s2r e = loop e where
                         loop e
                     Just x -> loop $! mappend s' $ return x
 
-wordcount = do
-    x <- await
-    yield $ toList $ fromListWith (+) x
-    wordcount
+wordcount = forever $ await >>= (yield . toList . fromListWith (+))
 
-r2s = do
-    x <- await
-    each x
-    r2s
+r2s = forever $ await >>= each
 
 timer :: Int -> Proxy x' x () (Maybe a) IO ()
 timer t = do
