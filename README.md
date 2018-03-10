@@ -17,6 +17,7 @@
     * [Polymorphic synonyms](#polymorphic-synonyms)
     * [Communication](#communication)
     * [Composition](#composition)
+
 # Intro
 Research conducted by Luca Lodi and Philippe Scorsolini for the course of "Principles of Programming Languages" at Politecnico di Milano by Professor Pradella Matteo and with the supervision of Riccardo Tommasini.
 
