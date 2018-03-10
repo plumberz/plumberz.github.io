@@ -133,7 +133,7 @@ A possible specialization of its signature can be:
 
     for :: Monad m => Producer a m r -> (a -> Effect m ()) -> Effect m r
 
-which explains better an example like (*for producer body*), where we loop over *producer* replacing each *yield* in it with *body*, which is a function from the output of the producer to an Effect. The point-free counterpart to *for* is (∼>) (pronounced *into*) such that:
+Which explains better an example like (*for producer body*), where we loop over *producer* replacing each *yield* in it with *body*, which is a function from the output of the producer to an Effect. The point-free counterpart to *for* is (∼>) (pronounced *into*) such that:
 
     (f ~> g) x = for (f x) g  
 
@@ -142,7 +142,7 @@ Similarly we have “feed”, that fills all the awaits this time with a given s
         (>~) :: Monad m => Proxy a' a y' y m b -> Proxy () b y' y m c 
                        -> Proxy a' a y' y m c
 
-    e.g. (draw >∼ p): loops over *p* replacing each *await* with *draw*.
+e.g. (draw >∼ p): loops over *p* replacing each *await* with *draw*.
 
         (>->) :: Monad m => Proxy a' a () b m r -> Proxy () b c' c m r 
                          -> Proxy a' a c' c m r
@@ -177,7 +177,7 @@ Which can be used to compose Pipes, similarly to the Unix pipe operator. Next we
             x <- await
             yield (f x)
 
-    When all the *awaits* and *yield* have been handled, the resulting Proxy can be run, removing the lifts and returning the underlying base monad.
+When all the *awaits* and *yield* have been handled, the resulting Proxy can be run, removing the lifts and returning the underlying base monad.
 
         main :: IO ()
         main = runEffect $ stdinLn >-> 
@@ -185,4 +185,4 @@ Which can be used to compose Pipes, similarly to the Unix pipe operator. Next we
                                                       -- unpack :: Text -> String viceversa
                         stdoutLn
 
-    Applying a monad transformer to a monad returns a monad, as we already said, so obviously results can be composed using the usual *bind* operator (>>=).
+Applying a monad transformer to a monad returns a monad, as we already said, so obviously results can be composed using the usual *bind* operator (>>=).
