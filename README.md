@@ -1,4 +1,5 @@
 
+
 # Stream Programming libraries in haskell
 
 
@@ -184,7 +185,50 @@ main = runEffect $ stdinLn >->
 Applying a monad transformer to a monad returns a monad, as we already said, so obviously results can be composed using the usual *bind* operator (>>=).
 
 ## Tubes
-...
+
+This report considers tubes-2.1.1.0, a stream programming library based on the concept of duality, inspired by Pipes.
+
+### Types
+
+The library is based on 2 main types: the tube monad, and the dual pump comonad.
+
+#### Tube
+A tube represent a computation that can **await** elements from upstream and **yield** elements to downstream.
+```haskell 
+Tube a b m r
+```
+ A general tube awaits elements of type **a**, yields elements of type **b**, performing a computation **m** that return a result of type **r**.
+Tubes can be composed using the (```><```) operator, to obtain a new tube.
+Is possible to obtain a monad ```m r``` from a ```Tube () () m r``` using the ```runTube``` function, or get a value from a tube that yield data with the ```reduce :: Monad m => (b -> a -> b) -> b -> Tube () a m () -> m b``` function.  
+The library provide 3 **subclasses** of tube type: **source**, **channel**, **sink**.
+
+#### Source
+```haskell 
+Source (m :: * -> *) a = Source {sample :: Tube () a m ()}
+```
+Sources are a specialization of Tube that can only ```yield``` elements downstream.
+The ```sample``` function is used to get the ```Tube``` corresponding to a ```Source```.
+A source can be synchronously merged with another using the ```merge :: Monad m => Source m a -> Source m a -> Source m a```. In this case the resoulting Source will yield elements from the two Sources (alternating), untill they both have no elements left.
+
+#### Sink 
+```haskell 
+Sink (m :: * -> *) a = Sink {pour :: Tube a () m ()}
+```
+In symmetry with the ```Source```, ```Sink``` is a specialization of ```Tube``` that can only await elements.
+```Pour``` is used to obtain the corresponding ```Tube``` from a ```Sink```.
+Since ```Sink``` is both a ```Contravariant``` functor and a ```Semigroup```, it is possible to map transformations over its inputs or be merged together beside another ```Sink```.
+
+#### Channel
+```haskell 
+Channel (m :: * -> *) a b = Channel {tune :: Tube a b m ()}
+```
+
+
+#### Pump
+```haskell 
+tube a b m r
+```
+
 
 ## Comparison
 ...
@@ -203,4 +247,3 @@ In [second attempt](code/wordcount_flink_v1.hs) we didn't use pipes-concurrent a
 The result where good, it kept the pace of **yes**, but this time the low rate inputs were the problem. The triggering of the window was done synchronously by taking the time before receiving a new input and checking after having received it, if the desired time from the last triggering had passed. Clearly this approach brought to the thread indefinitely waiting for a new input and never be able to yield downward if it didn't arrive.
 
 These considerations brought to the [third version](code/wordcount_flink_v2.hs), in which thanks to the use of [MVars](https://hackage.haskell.org/package/base-4.10.1.0/docs/Control-Concurrent-MVar.html) we separated the timer from the counter in two different threads, so that every time the timer is triggered, the timer prints the map contained in the shared MVar and resets it afterwards. Being the main tread the one awaiting for inputs and the timer's secondary thread not a Pipe, we didn't mange to yield downward the result of the counting allowing it to be used for further computation, breaking this way the composability at the core of the library. Have to be said that in the same way as we did, the function _fold_ in the Prelude of Pipes does not produce a Pipe and cannot be further composed, so it seems to be accepted this sort of behavior, even if it doesn't fit well in the framework of the usual stream processing definition.
-
