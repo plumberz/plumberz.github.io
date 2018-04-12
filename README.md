@@ -188,6 +188,24 @@ Applying a monad transformer to a monad returns a monad, as we already said, so 
 
 This report considers tubes-2.1.1.0, a stream programming library based on the concept of duality, inspired by Pipes.
 
+### Intuition
+
+Tubes bring stream programming capabilities into haskell. In particular it respond to the need of process in a series of stages (pipelining) a possibly infinite stream of elements. This is useful when the sequence of elements can't be hold in memory, but must be processed in chunks. Stream programming push this concept to its limit by having chunk of exactly one element.
+
+In the pipeline analogy, each stage is a Tube, and the composition of Tubes (itself a Tube) is the final pipeline. Tube has 3 specializations: Source, Channel, Sink. As suggested by names, a Tube usually is the composition of a Source (generate elements), optionally some Channels (process / transform elements) and a Sink (simply process the element).
+
+For example a Source continuosly reads input from console, then a Channel maps those strings to numbers, another Channel filter those numbers by a predicate, and finally a Sink output those numbers to the console.
+
+```haskell
+runTube $  -- compose and execute the Tube computation
+	sample prompt -- Source that continuosly read input from console 
+	>< Tubes.map reverse -- Channel that transform by a function
+	>< Tubes.filter (odd . length) -- Channel that filter by a predicate
+	>< pour display -- Sink that output strings to console
+```
+
+(><) is the Tube composition operator.
+
 ### Types
 
 The library is based on 2 main types: the tube monad, and the dual pump comonad.
@@ -222,13 +240,31 @@ Since ```Sink``` is both a ```Contravariant``` functor and a ```Semigroup```, it
 ```haskell 
 Channel (m :: * -> *) a b = Channel {tune :: Tube a b m ()}
 ```
-
+```Channel``` is a Tube that can convert values, while performing a monadic computation.
+While it can independently ```await``` and ```yield``` elements, it can be considered as an ```Arrow``` if it yields exactly once after awaiting.
 
 #### Pump
 ```haskell 
-tube a b m r
+(Comonad w) => Pump b a w r
 ```
+Pumps are the dual of Tubes, they can ```send``` elements of type ```b``` and ```recv``` (receive) elements of type ```a```. 
+Pumps are internally used in order to run Tubes (```runTube```), since Pump's ```send``` and ```recv``` match with Tube's ```await``` and ```yield```.
+Pumps can also be used in order to process streams (```lfold```, ```stream``` functions).
 
+### Utilities
+
+One particularly useful feature of the library is a set of function that ease the creation of Sources, Channels, and Sinks. 
+
+Among them:
+
+- ```map```, ```filter```, ```drop```, ```take```, ```takewhile``` create a Tube that works like the corrisponding functions in Prelude, but on a stream rather than a list.
+- ```prompt``` is a Source that continuosly yield strings read from the console input
+- ```display``` is a Sink that continuosly output the awaited element to the console.
+- ```each``` yield each element in a foldable
+- ```every``` is like each, but return the element wrapped in a ```Maybe```.
+
+Yields only values satisfying some predicate.
+- 
 
 ## Comparison
 ...
