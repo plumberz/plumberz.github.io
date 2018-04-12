@@ -199,12 +199,13 @@ For example a Source continuosly reads input from console, then a Channel maps t
 ```haskell
 runTube $  -- compose and execute the Tube computation
 	sample prompt -- Source that continuosly read input from console 
-	>< Tubes.map reverse -- Channel that transform by a function
-	>< Tubes.filter (odd . length) -- Channel that filter by a predicate
+	>< map reverse -- Channel that transform by a function
+	>< filter (odd . length) -- Channel that filter by a predicate
 	>< pour display -- Sink that output strings to console
 ```
 
-(><) is the Tube composition operator.
+(```><```) is the Tube composition operator.
+```map``` and ```filter``` are imported from ```Tubes.Util```.
 
 ### Types
 
