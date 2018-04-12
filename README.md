@@ -264,9 +264,6 @@ Among them:
 - ```each``` yield each element in a foldable
 - ```every``` is like each, but return the element wrapped in a ```Maybe```.
 
-Yields only values satisfying some predicate.
-- 
-
 ## Comparison
 ...
 [wordcount MapReduce style](code/wordcount_mapReduce.hs)
