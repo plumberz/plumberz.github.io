@@ -265,8 +265,20 @@ Among them:
 - ```every``` is like each, but return the element wrapped in a ```Maybe```.
 
 ## Comparison
-...
-[wordcount MapReduce style](code/wordcount_mapReduce.hs)
+
+Since Tubes is inspired by Pipes, many base types and functions of the library have a corresponding on in the other library.
+
+| *Pipes*  	| *Tubes*                                            	|
+|----------	|----------------------------------------------------	|
+| ```Proxy```    	| ```Tube``` _[!] unlike Proxy, Tube is mono-directional_ 	|
+| ```Producer``` 	| ```Source```                                             	|
+| ```Pipe```     	| ```Channel```                                            	|
+| ```Consumer``` 	| ```Sink```                                               	|
+| ```Effect```   	| ```Tube () () m r```                                     	|
+
+The communication between Proxy / Tube use the very same primitives ```yield``` and ```await``` with the same semantic.
+
+
 
 ## Windowed Wordcount with Pipes
 We'll here show the various attempt we made to try to create a simple timed "_wordcount_" example as the one that can be found on the examples of many stream processing engine (such as [Flink](https://ci.apache.org/projects/flink/flink-docs-release-1.4/quickstart/setup_quickstart.html)), given a tumbling window of 5 seconds and an input stream of lines of text, returns at every triggering of the window a map (word, count) where count is the number of times a certain word has been seen during the elapsed time and assuming the input data arriving in the correct order.
