@@ -284,11 +284,80 @@ Both the libraries reimplement the basic operations on lists (```map```, ```filt
 
 In order to show the similarities in the concepts and the small differences in the syntax, we implemented a Map-Reduce flavoured word count program using both Pipes and Tubes.
 
-
+#### Pipes
 ```haskell
+import qualified Pipes.Prelude as P
+import Data.List.Split
+import Pipes
+import Control.Monad (forever)
+import Data.HashMap.Strict
+--
+-- wordcount mapReduce-style, only benefit is to reduce memory consumption
+--
 
+main :: IO ()
+main = runEffect (P.fold (\x a -> insertWith (+) a 1 x) 
+                        empty 
+                        (show . toList) 
+                        (P.stdinLn >-> 
+                            P.map (splitOn " ") >-> 
+                            forever (await >>= each)
+                            )
+                        ) 
+        >>= putStrLn
 ```
 
+#### Tubes
+```haskell
+import Prelude hiding (map, filter, reduce)
+import qualified Prelude as P
+import Data.Semigroup
+import Control.Monad (unless)
+
+import Tubes
+import Streaming (MonadIO, liftIO)
+import System.IO
+
+import Data.Char (toLower, isSpace, isAlphaNum)
+import qualified Data.HashMap.Strict as Map
+
+charsFromFile :: MonadIO m => Handle -> Source m Char
+charsFromFile handle = Source $ do
+    eof <- liftIO . hIsEOF $ handle
+    unless eof $ do
+        c <- liftIO $ hGetChar handle
+        yield c
+        sample $ charsFromFile handle
+
+split_words :: Monad m => Char -> Channel m Char String 
+split_words separator = Channel $ go [] where
+    go w_acc = do
+        c <- await
+        if c == separator then do
+            unless (null w_acc) $ yield (reverse w_acc)
+            go []
+        else do
+            let w_acc' = c : w_acc
+            go w_acc'
+
+validChar :: Char -> Bool
+validChar c = (c==' ') || (isAlphaNum c)
+
+word2KV w = (w,1)
+
+tube handle = sample (charsFromFile handle)
+    >< map toLower
+    >< filter validChar 
+    >< tune (split_words ' ')
+    >< map word2KV  
+
+main :: IO ()
+main = do
+    handle <- openFile "LICENSE" ReadMode
+    let t = tube handle
+    wc <- reduce (\ m (k,v) -> Map.insertWith (+) k v m) Map.empty t
+    print $ show wc
+```
 
 ## Windowed Wordcount with Pipes
 We'll here show the various attempt we made to try to create a simple timed "_wordcount_" example as the one that can be found on the examples of many stream processing engine (such as [Flink](https://ci.apache.org/projects/flink/flink-docs-release-1.4/quickstart/setup_quickstart.html)), given a tumbling window of 5 seconds and an input stream of lines of text, returns at every triggering of the window a map (word, count) where count is the number of times a certain word has been seen during the elapsed time and assuming the input data arriving in the correct order.
