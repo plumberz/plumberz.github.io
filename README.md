@@ -270,14 +270,24 @@ Since Tubes is inspired by Pipes, many base types and functions of the library h
 
 | *Pipes*  	| *Tubes*                                            	|
 |----------	|----------------------------------------------------	|
-| ```Proxy```    	| ```Tube``` _[!] unlike Proxy, Tube is mono-directional_ 	|
+| ```Proxy```    	| ```Tube``` 	|
 | ```Producer``` 	| ```Source```                                             	|
 | ```Pipe```     	| ```Channel```                                            	|
 | ```Consumer``` 	| ```Sink```                                               	|
 | ```Effect```   	| ```Tube () () m r```                                     	|
 
+Note that unlike ```Proxy```, ```Tube``` is mono-directional.
+
 The communication between Proxy / Tube use the very same primitives ```yield``` and ```await``` with the same semantic.
 
+Both the libraries reimplement the basic operations on lists (```map```, ```filter```, ...) containted in ```Prelude``` in terms of ```Proxy``` / ```Tube```. Pipes define these functions in ```Pipes.Prelude```, Tubes inside ```Tubes.Util```.
+
+In order to show the similarities in the concepts and the small differences in the syntax, we implemented a Map-Reduce flavoured word count program using both Pipes and Tubes.
+
+
+```haskell
+
+```
 
 
 ## Windowed Wordcount with Pipes
