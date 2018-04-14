@@ -1,4 +1,5 @@
 
+
 # Stream Programming libraries in haskell
 
 
@@ -188,11 +189,179 @@ main = runEffect $ stdinLn >->
 Applying a monad transformer to a monad returns a monad, as we already said, so obviously results can be composed using the usual *bind* operator (>>=).
 
 ## Tubes
-...
+
+This report considers tubes-2.1.1.0, a stream programming library based on the concept of duality, inspired by Pipes.
+
+### Intuition
+
+Tubes bring stream programming capabilities into haskell. In particular it respond to the need of process in a series of stages (pipelining) a possibly infinite stream of elements. This is useful when the sequence of elements can't be hold in memory, but must be processed in chunks. Stream programming push this concept to its limit by having chunk of exactly one element.
+
+In the pipeline analogy, each stage is a Tube, and the composition of Tubes (itself a Tube) is the final pipeline. Tube has 3 specializations: Source, Channel, Sink. As suggested by names, a Tube usually is the composition of a Source (generate elements), optionally some Channels (process / transform elements) and a Sink (simply process the element).
+
+For example a Source continuosly reads input from console, then a Channel maps those strings to numbers, another Channel filter those numbers by a predicate, and finally a Sink output those numbers to the console.
+
+```haskell
+runTube $  -- compose and execute the Tube computation
+	sample prompt -- Source that continuosly read input from console 
+	>< map reverse -- Channel that transform by a function
+	>< filter (odd . length) -- Channel that filter by a predicate
+	>< pour display -- Sink that output strings to console
+```
+
+(```><```) is the Tube composition operator.
+```map``` and ```filter``` are imported from ```Tubes.Util```.
+
+### Types
+
+The library is based on 2 main types: the tube monad, and the dual pump comonad.
+
+#### Tube
+A tube represent a computation that can **await** elements from upstream and **yield** elements to downstream.
+```haskell 
+Tube a b m r
+```
+ A general tube awaits elements of type **a**, yields elements of type **b**, performing a computation **m** that return a result of type **r**.
+Tubes can be composed using the (```><```) operator, to obtain a new tube.
+Is possible to obtain a monad ```m r``` from a ```Tube () () m r``` using the ```runTube``` function, or get a value from a tube that yield data with the ```reduce :: Monad m => (b -> a -> b) -> b -> Tube () a m () -> m b``` function.  
+The library provide 3 **subclasses** of tube type: **source**, **channel**, **sink**.
+
+#### Source
+```haskell 
+Source (m :: * -> *) a = Source {sample :: Tube () a m ()}
+```
+Sources are a specialization of Tube that can only ```yield``` elements downstream.
+The ```sample``` function is used to get the ```Tube``` corresponding to a ```Source```.
+A source can be synchronously merged with another using the ```merge :: Monad m => Source m a -> Source m a -> Source m a```. In this case the resoulting Source will yield elements from the two Sources (alternating), untill they both have no elements left.
+
+#### Sink 
+```haskell 
+Sink (m :: * -> *) a = Sink {pour :: Tube a () m ()}
+```
+In symmetry with the ```Source```, ```Sink``` is a specialization of ```Tube``` that can only await elements.
+```Pour``` is used to obtain the corresponding ```Tube``` from a ```Sink```.
+Since ```Sink``` is both a ```Contravariant``` functor and a ```Semigroup```, it is possible to map transformations over its inputs or be merged together beside another ```Sink```.
+
+#### Channel
+```haskell 
+Channel (m :: * -> *) a b = Channel {tune :: Tube a b m ()}
+```
+```Channel``` is a Tube that can convert values, while performing a monadic computation.
+While it can independently ```await``` and ```yield``` elements, it can be considered as an ```Arrow``` if it yields exactly once after awaiting.
+
+#### Pump
+```haskell 
+(Comonad w) => Pump b a w r
+```
+Pumps are the dual of Tubes, they can ```send``` elements of type ```b``` and ```recv``` (receive) elements of type ```a```. 
+Pumps are internally used in order to run Tubes (```runTube```), since Pump's ```send``` and ```recv``` match with Tube's ```await``` and ```yield```.
+Pumps can also be used in order to process streams (```lfold```, ```stream``` functions).
+
+### Utilities
+
+One particularly useful feature of the library is a set of function that ease the creation of Sources, Channels, and Sinks. 
+
+Among them:
+
+- ```map```, ```filter```, ```drop```, ```take```, ```takewhile``` create a Tube that works like the corrisponding functions in Prelude, but on a stream rather than a list.
+- ```prompt``` is a Source that continuosly yield strings read from the console input
+- ```display``` is a Sink that continuosly output the awaited element to the console.
+- ```each``` yield each element in a foldable
+- ```every``` is like each, but return the element wrapped in a ```Maybe```.
 
 ## Comparison
-...
-[wordcount MapReduce style](code/wordcount_mapReduce.hs)
+
+Since Tubes is inspired by Pipes, many base types and functions of the library have a corresponding on in the other library.
+
+| *Pipes*  	| *Tubes*                                            	|
+|----------	|----------------------------------------------------	|
+| ```Proxy```    	| ```Tube``` 	|
+| ```Producer``` 	| ```Source```                                             	|
+| ```Pipe```     	| ```Channel```                                            	|
+| ```Consumer``` 	| ```Sink```                                               	|
+| ```Effect```   	| ```Tube () () m r```                                     	|
+
+Note that unlike ```Proxy```, ```Tube``` is mono-directional.
+
+The communication between Proxy / Tube use the very same primitives ```yield``` and ```await``` with the same semantic.
+
+Both the libraries reimplement the basic operations on lists (```map```, ```filter```, ...) containted in ```Prelude``` in terms of ```Proxy``` / ```Tube```. Pipes define these functions in ```Pipes.Prelude```, Tubes inside ```Tubes.Util```.
+
+In order to show the similarities in the concepts and the small differences in the syntax, we implemented a Map-Reduce flavoured word count program using both Pipes and Tubes.
+
+#### Pipes
+```haskell
+import qualified Pipes.Prelude as P
+import Data.List.Split
+import Pipes
+import Control.Monad (forever)
+import Data.HashMap.Strict
+--
+-- wordcount mapReduce-style, only benefit is to reduce memory consumption
+--
+
+main :: IO ()
+main = runEffect (P.fold (\x a -> insertWith (+) a 1 x) 
+                        empty 
+                        (show . toList) 
+                        (P.stdinLn >-> 
+                            P.map (splitOn " ") >-> 
+                            forever (await >>= each)
+                            )
+                        ) 
+        >>= putStrLn
+```
+
+#### Tubes
+```haskell
+import Prelude hiding (map, filter, reduce)
+import qualified Prelude as P
+import Data.Semigroup
+import Control.Monad (unless)
+
+import Tubes
+import Streaming (MonadIO, liftIO)
+import System.IO
+
+import Data.Char (toLower, isSpace, isAlphaNum)
+import qualified Data.HashMap.Strict as Map
+
+charsFromFile :: MonadIO m => Handle -> Source m Char
+charsFromFile handle = Source $ do
+    eof <- liftIO . hIsEOF $ handle
+    unless eof $ do
+        c <- liftIO $ hGetChar handle
+        yield c
+        sample $ charsFromFile handle
+
+split_words :: Monad m => Char -> Channel m Char String 
+split_words separator = Channel $ go [] where
+    go w_acc = do
+        c <- await
+        if c == separator then do
+            unless (null w_acc) $ yield (reverse w_acc)
+            go []
+        else do
+            let w_acc' = c : w_acc
+            go w_acc'
+
+validChar :: Char -> Bool
+validChar c = (c==' ') || (isAlphaNum c)
+
+word2KV w = (w,1)
+
+tube handle = sample (charsFromFile handle)
+    >< map toLower
+    >< filter validChar 
+    >< tune (split_words ' ')
+    >< map word2KV  
+
+main :: IO ()
+main = do
+    handle <- openFile "LICENSE" ReadMode
+    let t = tube handle
+    wc <- reduce (\ m (k,v) -> Map.insertWith (+) k v m) Map.empty t
+    print $ show wc
+```
 
 ## Windowed Wordcount with Pipes
 We'll here describe the various attempt we made to try to create a simple timed "_wordcount_" example as the one that can be found on the examples of many stream processing engine (such as [Flink](https://ci.apache.org/projects/flink/flink-docs-release-1.4/quickstart/setup_quickstart.html)), given a tumbling window of 5 seconds and an input stream of lines of text, returns at every triggering of the window a map (word, count) where count is the number of times a certain word has been seen during the elapsed time and assuming the input data arriving in the correct order.
@@ -204,4 +373,5 @@ In fact we was feeding into the mailbox a _Maybe Char_, so that a _Nothing_ coul
 Therefore in the  [second attempt](code/wordcount_flink_v1.hs) we didn't use pipes-concurrent anymore, instead we tried a to use the standard [clock library](https://hackage.haskell.org/package/time-1.9.1/docs/Data-Time-Clock.html) from haskell, which obviously does not guarantees the exactness of the time returned by its **getCurrentTime** function, seen that it returns the system clock time, which can be modified by the user or adjusted by the system in any moment, but still, assuming an ideal situation, would be enough to prove what we are trying to show.
 The result where good, it kept the pace of **yes**, but this time the low rate inputs were the problem. The triggering of the window was achieved by taking the time before receiving a new input and checking after having received it, if the desired time from the last triggering had passed. Clearly this approach brought to the thread indefinitely waiting for a new input and never be able to yield downward even if the window should have been triggered. This problem arose because we were checking the time at each new tuple and we were not able to trigger it from the outside, but we were still able to use the component as a Pipe and connect it to following Proxies.
 
-These considerations brought to the [third version](code/wordcount_flink_v2.hs), in which thanks to the use of [MVars](https://hackage.haskell.org/package/base-4.10.1.0/docs/Control-Concurrent-MVar.html) we separated the timer from the counter in two different threads, so that every time the timer is triggered, the timer prints the map contained in the shared MVar and resets it afterwards. Being the main thread the one awaiting for inputs and the timer's secondary thread not a Pipe, we didn't mange to yield downward the result of the counting allowing it to be used for further computation, breaking this way the composability at the core of the library. It have to be said that in the same way as we did, the function _fold_ in the Prelude of Pipes does not produce a Pipe and cannot be further composed, so it seems to be accepted this sort of behavior, even if it doesn't fit well in the framework of the usual stream processing definition.
+These considerations brought to the [third version](code/wordcount_flink_v2.hs), in which thanks to the use of [MVars](https://hackage.haskell.org/package/base-4.10.1.0/docs/Control-Concurrent-MVar.html) we separated the timer from the counter in two different threads, so that every time the timer is triggered, the timer prints the map contained in the shared MVar and resets it afterwards. Being the main tread the one awaiting for inputs and the timer's secondary thread not a Pipe, we didn't mange to yield downward the result of the counting allowing it to be used for further computation, breaking this way the composability at the core of the library. Have to be said that in the same way as we did, the function _fold_ in the Prelude of Pipes does not produce a Pipe and cannot be further composed, so it seems to be accepted this sort of behavior, even if it doesn't fit well in the framework of the usual stream processing definition.
+
