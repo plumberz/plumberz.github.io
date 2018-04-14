@@ -19,11 +19,11 @@ main = do
     runEffect $ P.stdinLn >-> 
                     P.map (splitOn " ") >-> 
                     r2s >->
-                    window 5 >-> 
+                    windowCount 5 >-> 
                     r2s >-> P.map show >-> P.stdoutLn
 
 
-window w = do 
+windowCount w = do 
     t0 <- lift getCurrentTime
     loop (realToFrac w) t0 empty where 
         loop w last s = do
