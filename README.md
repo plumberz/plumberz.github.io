@@ -3,24 +3,37 @@
 # Stream Programming libraries in haskell
 
 
+Table of Contents
+=================
 
-## Table of Contents
-* [Intro](#intro)
-* [The Libraries](#the-libraries)
- * [Pipes](#pipes)
-    * [Types](#types)
-    * [Proxy](#proxy)
-    * [Concrete type synonyms](#concrete-type-synonyms)
-       * [Effect](#effect)
-       * [Producer](#producer)
-       * [Consumer](#consumer)
-       * [Pipe](#pipe)
-    * [Polymorphic synonyms](#polymorphic-synonyms)
-    * [Communication](#communication)
-    * [Composition](#composition)
-  * [Tubes](#tubes)
-  * [Comparison](#comparison)
-  * [Windowed Wordcount with Pipes](#windowed-wordcount-with-pipes)
+   * [Stream Programming libraries in haskell](#stream-programming-libraries-in-haskell)
+      * [Table of Contents](#table-of-contents)
+   * [Intro](#intro)
+   * [The Libraries](#the-libraries)
+      * [Pipes](#pipes)
+         * [Types](#types)
+            * [Proxy](#proxy)
+            * [Concrete type synonyms](#concrete-type-synonyms)
+               * [Effect](#effect)
+               * [Producer](#producer)
+               * [Consumer](#consumer)
+               * [Pipe](#pipe)
+               * [Polymorphic synonyms](#polymorphic-synonyms)
+         * [Communication](#communication)
+         * [Composition](#composition)
+      * [Tubes](#tubes)
+         * [Intuition](#intuition)
+         * [Types](#types-1)
+            * [Tube](#tube)
+            * [Source](#source)
+            * [Sink](#sink)
+            * [Channel](#channel)
+            * [Pump](#pump)
+         * [Utilities](#utilities)
+      * [Comparison](#comparison)
+        * [Pipes](#pipes-1)
+        * [Tubes](#tubes-1)
+      * [Windowed Wordcount with Pipes](#windowed-wordcount-with-pipes)
 
 # Intro
 Research conducted by Luca Lodi and Philippe Scorsolini for the course of "Principles of Programming Languages" at Politecnico di Milano by Professor Pradella Matteo and with the supervision of Riccardo Tommasini.
@@ -202,7 +215,7 @@ For example a Source continuosly reads input from console, then a Channel maps t
 
 ```haskell
 runTube $  -- compose and execute the Tube computation
-	sample prompt -- Source that continuosly read input from console 
+	sample prompt -- Source that continuosly read input from console
 	>< map reverse -- Channel that transform by a function
 	>< filter (odd . length) -- Channel that filter by a predicate
 	>< pour display -- Sink that output strings to console
@@ -217,7 +230,7 @@ The library is based on 2 main types: the tube monad, and the dual pump comonad.
 
 #### Tube
 A tube represent a computation that can **await** elements from upstream and **yield** elements to downstream.
-```haskell 
+```haskell
 Tube a b m r
 ```
  A general tube awaits elements of type **a**, yields elements of type **b**, performing a computation **m** that return a result of type **r**.
@@ -226,15 +239,15 @@ Is possible to obtain a monad ```m r``` from a ```Tube () () m r``` using the ``
 The library provide 3 **subclasses** of tube type: **source**, **channel**, **sink**.
 
 #### Source
-```haskell 
+```haskell
 Source (m :: * -> *) a = Source {sample :: Tube () a m ()}
 ```
 Sources are a specialization of Tube that can only ```yield``` elements downstream.
 The ```sample``` function is used to get the ```Tube``` corresponding to a ```Source```.
 A source can be synchronously merged with another using the ```merge :: Monad m => Source m a -> Source m a -> Source m a```. In this case the resoulting Source will yield elements from the two Sources (alternating), untill they both have no elements left.
 
-#### Sink 
-```haskell 
+#### Sink
+```haskell
 Sink (m :: * -> *) a = Sink {pour :: Tube a () m ()}
 ```
 In symmetry with the ```Source```, ```Sink``` is a specialization of ```Tube``` that can only await elements.
@@ -242,23 +255,23 @@ In symmetry with the ```Source```, ```Sink``` is a specialization of ```Tube``` 
 Since ```Sink``` is both a ```Contravariant``` functor and a ```Semigroup```, it is possible to map transformations over its inputs or be merged together beside another ```Sink```.
 
 #### Channel
-```haskell 
+```haskell
 Channel (m :: * -> *) a b = Channel {tune :: Tube a b m ()}
 ```
 ```Channel``` is a Tube that can convert values, while performing a monadic computation.
 While it can independently ```await``` and ```yield``` elements, it can be considered as an ```Arrow``` if it yields exactly once after awaiting.
 
 #### Pump
-```haskell 
+```haskell
 (Comonad w) => Pump b a w r
 ```
-Pumps are the dual of Tubes, they can ```send``` elements of type ```b``` and ```recv``` (receive) elements of type ```a```. 
+Pumps are the dual of Tubes, they can ```send``` elements of type ```b``` and ```recv``` (receive) elements of type ```a```.
 Pumps are internally used in order to run Tubes (```runTube```), since Pump's ```send``` and ```recv``` match with Tube's ```await``` and ```yield```.
 Pumps can also be used in order to process streams (```lfold```, ```stream``` functions).
 
 ### Utilities
 
-One particularly useful feature of the library is a set of function that ease the creation of Sources, Channels, and Sinks. 
+One particularly useful feature of the library is a set of function that ease the creation of Sources, Channels, and Sinks.
 
 Among them:
 
@@ -300,14 +313,14 @@ import Data.HashMap.Strict
 --
 
 main :: IO ()
-main = runEffect (P.fold (\x a -> insertWith (+) a 1 x) 
-                        empty 
-                        (show . toList) 
-                        (P.stdinLn >-> 
-                            P.map (splitOn " ") >-> 
+main = runEffect (P.fold (\x a -> insertWith (+) a 1 x)
+                        empty
+                        (show . toList)
+                        (P.stdinLn >->
+                            P.map (splitOn " ") >->
                             forever (await >>= each)
                             )
-                        ) 
+                        )
         >>= putStrLn
 ```
 
@@ -333,7 +346,7 @@ charsFromFile handle = Source $ do
         yield c
         sample $ charsFromFile handle
 
-split_words :: Monad m => Char -> Channel m Char String 
+split_words :: Monad m => Char -> Channel m Char String
 split_words separator = Channel $ go [] where
     go w_acc = do
         c <- await
@@ -351,7 +364,7 @@ word2KV w = (w,1)
 
 tube handle = sample (charsFromFile handle)
     >< map toLower
-    >< filter validChar 
+    >< filter validChar
     >< tune (split_words ' ')
     >< map word2KV  
 
@@ -374,4 +387,3 @@ Therefore in the  [second attempt](code/wordcount_flink_v1.hs) we didn't use pip
 The result where good, it kept the pace of **yes**, but this time the low rate inputs were the problem. The triggering of the window was achieved by taking the time before receiving a new input and checking after having received it, if the desired time from the last triggering had passed. Clearly this approach brought to the thread indefinitely waiting for a new input and never be able to yield downward even if the window should have been triggered. This problem arose because we were checking the time at each new tuple and we were not able to trigger it from the outside, but we were still able to use the component as a Pipe and connect it to following Proxies.
 
 These considerations brought to the [third version](code/wordcount_flink_v2.hs), in which thanks to the use of [MVars](https://hackage.haskell.org/package/base-4.10.1.0/docs/Control-Concurrent-MVar.html) we separated the timer from the counter in two different threads, so that every time the timer is triggered, the timer prints the map contained in the shared MVar and resets it afterwards. Being the main tread the one awaiting for inputs and the timer's secondary thread not a Pipe, we didn't mange to yield downward the result of the counting allowing it to be used for further computation, breaking this way the composability at the core of the library. Have to be said that in the same way as we did, the function _fold_ in the Prelude of Pipes does not produce a Pipe and cannot be further composed, so it seems to be accepted this sort of behavior, even if it doesn't fit well in the framework of the usual stream processing definition.
-
