@@ -299,7 +299,7 @@ The communication between Proxy / Tube use the very same primitives ```yield``` 
 
 Both the libraries reimplement the basic operations on lists (```map```, ```filter```, ...) containted in ```Prelude``` in terms of ```Proxy``` / ```Tube```. Pipes define these functions in ```Pipes.Prelude```, Tubes inside ```Tubes.Util```.
 
-In order to show the similarities in the concepts and the small differences in the syntax, we implemented a Map-Reduce flavoured word count program using both Pipes and Tubes.
+In order to show the similarities in the concepts and the small differences in these two libraries, we implemented a Map-Reduce flavoured batch word count using both of them, taking advantage of the stream programming paradigm offered which allowed us to adopt a dataflow approach to the problem, pipelining the steps of the computation .
 
 #### Pipes
 ```haskell
@@ -308,20 +308,24 @@ import Data.List.Split
 import Pipes
 import Control.Monad (forever)
 import Data.HashMap.Strict
+import Data.Text (toLower,pack,unpack)
+
 --
 -- wordcount mapReduce-style, only benefit is to reduce memory consumption
 --
 
 main :: IO ()
-main = runEffect (P.fold (\x a -> insertWith (+) a 1 x)
-                        empty
-                        (show . toList)
-                        (P.stdinLn >->
-                            P.map (splitOn " ") >->
-                            forever (await >>= each)
+main = runEffect (P.fold (\x a -> insertWith (+) a 1 x)     -- insert into the state map, adding one each time
+                        empty                        -- the empty map
+                        (show . toList)              -- at the end it produces a String
+                                                     -- representing the list of the  elements in the map
+                        (   P.stdinLn >->
+                            P.map (splitOn " ") >->  -- splits the strings received and produces a list of the words
+                            forever (await >>= each) >-> -- each unpacks the elements of the list received by awaiting
+                            P.map (unpack . toLower . pack) -- use toLower from Text to convert a string to lowercase
                             )
                         )
-        >>= putStrLn
+        >>= putStrLn        -- print to stdout the result in the IO produced the runEffect
 ```
 
 #### Tubes

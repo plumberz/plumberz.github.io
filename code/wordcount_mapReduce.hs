@@ -3,6 +3,7 @@ import Data.List.Split
 import Pipes
 import Control.Monad (forever)
 import Data.HashMap.Strict
+import Data.Text (pack, unpack, toLower)
 --
 -- wordcount mapReduce-style, only benefit is to reduce memory consumption
 --
@@ -13,7 +14,8 @@ main = runEffect (P.fold (\x a -> insertWith (+) a 1 x)
                         (show . toList) 
                         (P.stdinLn >-> 
                             P.map (splitOn " ") >-> 
-                            forever (await >>= each)
+                            forever (await >>= each) >->
+                            P.map (unpack . toLower . pack)
                             )
                         ) 
         >>= putStrLn
