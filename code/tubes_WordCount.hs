@@ -5,7 +5,7 @@ import Data.Semigroup
 import Control.Monad (unless)
 
 import Tubes
-import Streaming (MonadIO, liftIO)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import System.IO
 
 import Data.Char (toLower, isSpace, isAlphaNum)

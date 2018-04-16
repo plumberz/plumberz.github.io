@@ -308,24 +308,25 @@ import Data.List.Split
 import Pipes
 import Control.Monad (forever)
 import Data.HashMap.Strict
-import Data.Text (toLower,pack,unpack)
-
+import Data.Text (pack, unpack, toLower)
+import System.IO
 --
 -- wordcount mapReduce-style, only benefit is to reduce memory consumption
 --
 
 main :: IO ()
-main = runEffect (P.fold (\x a -> insertWith (+) a 1 x)     -- insert into the state map, adding one each time
-                        empty                        -- the empty map
-                        (show . toList)              -- at the end it produces a String
-                                                     -- representing the list of the  elements in the map
-                        (   P.stdinLn >->
-                            P.map (splitOn " ") >->  -- splits the strings received and produces a list of the words
-                            forever (await >>= each) >-> -- each unpacks the elements of the list received by awaiting
-                            P.map (unpack . toLower . pack) -- use toLower from Text to convert a string to lowercase
+main =  withFile "test-text.txt" ReadMode $
+    \file -> runEffect (P.fold (\x a -> insertWith (+) a 1 x)      -- insert into the state map, adding one each time
+                        empty  -- the empty map
+                        (show . toList)   -- at the end it produces a String
+                        (P.fromHandle file >->
+                            P.map (splitOn " ") >->  -- splits the strings received and     produces a list of the words                           
+                            forever (await >>= each) >->     -- each unpacks the elements of the list received by awaiting
+                            P.map (unpack . toLower . pack)   -- use toLower from Text to convert a string to lowercase
                             )
                         )
-        >>= putStrLn        -- print to stdout the result in the IO produced the runEffect
+        >>= putStrLn
+
 ```
 
 #### Tubes
