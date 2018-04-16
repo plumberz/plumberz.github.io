@@ -44,7 +44,7 @@ tube handle = sample (charsFromFile handle)
 
 main :: IO ()
 main = do
-    handle <- openFile "LICENSE" ReadMode
+    handle <- openFile "test-text.txt" ReadMode
     let t = tube handle
     wc <- reduce (\ m (k,v) -> Map.insertWith (+) k v m) Map.empty t
     print $ show wc
