@@ -10,7 +10,8 @@ import System.IO
 --
 
 main :: IO ()
-main =  withFile "test-text.txt" ReadMode $ \file -> runEffect (P.fold (\x a -> insertWith (+) a 1 x) 
+main =  withFile "test-text.txt" ReadMode $ 
+    \file -> runEffect (P.fold (\x a -> insertWith (+) a 1 x) 
                         empty 
                         (show . toList) 
                         (P.fromHandle file >-> 
