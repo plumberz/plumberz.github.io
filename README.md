@@ -337,7 +337,14 @@ The communication between Proxy / Tube use the very same primitives ```yield``` 
 
 Both the libraries reimplement the basic operations on lists (```map```, ```filter```, ...) containted in ```Prelude``` in terms of ```Proxy``` / ```Tube```. Pipes define these functions in ```Pipes.Prelude```, Tubes inside ```Tubes.Util```.
 
-In order to show the similarities in the concepts and the small differences in these two libraries, we implemented a Map-Reduce flavoured batch word count using both of them, taking advantage of the stream programming paradigm offered which allowed us to adopt a dataflow approach to the problem, pipelining the steps of the computation .
+In order to show the similarities in the concepts and the small differences in these two libraries, we implemented a Map-Reduce flavoured batch word count using both of them, taking advantage of the stream programming paradigm offered which allowed us to adopt a dataflow approach to the problem, pipelining the steps of the computation.
+
+Notice that: 
+- Both the programs read a textual test file, pass that to a Produce / Source that read chucks of data, get the words, map the words to lowercase, then reduce the outputs of the pipeline incrementing the value of a map corresponding to that word.
+
+- Both the programs use the ```map``` and the ```fold```/```reduce``` utils, that has a similar syntax and semantic with respect to the Prelude version.
+
+- The composition follows a similar linear structure: ```... >-> ... >-> ...``` (Pipes) vs ```... >< ... >< ...``` (Tubes).
 
 #### Pipes
 ```haskell
@@ -371,52 +378,53 @@ main =  withFile "test-text.txt" ReadMode $
 ```haskell
 import Prelude hiding (map, filter, reduce)
 import qualified Prelude as P
-import Data.Semigroup
-import Control.Monad (unless)
-
+import Control.Monad (unless, liftM)
+import Control.Monad.IO.Class (liftIO, MonadIO)
 import Tubes
-import Streaming (MonadIO, liftIO)
 import System.IO
-
-import Data.Char (toLower, isSpace, isAlphaNum)
+import Data.Char (toLower, isAlphaNum)
 import qualified Data.HashMap.Strict as Map
+--
+-- wordcount mapReduce-style, only benefit is to reduce memory consumption
+--
 
-charsFromFile :: MonadIO m => Handle -> Source m Char
-charsFromFile handle = Source $ do
-    eof <- liftIO . hIsEOF $ handle
-    unless eof $ do
-        c <- liftIO $ hGetChar handle
-        yield c
-        sample $ charsFromFile handle
-
-split_words :: Monad m => Char -> Channel m Char String
-split_words separator = Channel $ go [] where
-    go w_acc = do
-        c <- await
-        if c == separator then do
-            unless (null w_acc) $ yield (reverse w_acc)
-            go []
+-- read a word from a file handle, 
+-- a word is a non-empty sequence of alphanumeric characters.
+hGetWord :: Handle -> IO String
+hGetWord handle = go [] where
+    go :: String -> IO String
+    go word = do
+        eof <- hIsEOF $ handle
+        if not eof then do
+            c <- hGetChar handle
+            if not $ isAlphaNum c then do -- any not alphanum is separator
+                if not (null word) then do
+                    return word
+                else go word
+            else do
+                let word' = word ++ [c]
+                go word'
         else do
-            let w_acc' = c : w_acc
-            go w_acc'
+            return word
 
-validChar :: Char -> Bool
-validChar c = (c==' ') || (isAlphaNum c)
+-- a Source that continuosly yields words  read from a file handle. 
+wordsFromFile :: MonadIO m => Handle -> Source m String
+wordsFromFile handle = Source $ do
+    eof <- liftIO $ hIsEOF handle                                 
+    unless eof $ do   
+        w <- liftIO $ hGetWord handle 
+        yield w
+        sample $ wordsFromFile handle
 
-word2KV w = (w,1)
-
-tube handle = sample (charsFromFile handle)
-    >< map toLower
-    >< filter validChar
-    >< tune (split_words ' ')
-    >< map word2KV  
-
+-- Open a test file and print to console a map (word : count). 
 main :: IO ()
 main = do
-    handle <- openFile "LICENSE" ReadMode
-    let t = tube handle
-    wc <- reduce (\ m (k,v) -> Map.insertWith (+) k v m) Map.empty t
-    print $ show wc
+    handle <- openFile "test-text.txt" ReadMode
+    let words = (sample $ wordsFromFile handle) >< (map $ liftM toLower) -- read words and convert to lowercase
+    wcount <- reduce countWords Map.empty words
+    print $ show wcount 
+    where
+        countWords m word = Map.insertWith (+) word 1 m -- increment the map value for the corresponding word, or initialize word ounter to 1 
 ```
 
 ## Windowed Wordcount with Pipes
