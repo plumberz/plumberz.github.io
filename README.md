@@ -281,6 +281,44 @@ Among them:
 - ```each``` yield each element in a foldable
 - ```every``` is like each, but return the element wrapped in a ```Maybe```.
 
+## Theoretical takeaways
+
+If you are not familiar with haskell's theoretical concepts this chapter offer a brief recap of the main ones to grasp in order to understand the components of these libraries. 
+The concepts are presented in an intuitive rather than formal way. For a more formal explanation you can read the referred resources.
+
+#### Monad
+Monads represents computations that can wrap values and potentially have side effects.
+For example reading a character from a file is a computation with side effect (```IO Char``` monad).
+Computations (monads) can be composed to obtain new more complex computations.
+Many types of monads exists, to represent particular properties of computations. For example computation with input/output side-effects are represented as ```IO``` monads, while computations that wrap a state are based on the ```State``` monad.
+
+[Monads in pictures](http://adit.io/posts/2013-04-17-functors,_applicatives,_and_monads_in_pictures.html)
+
+#### Monad transformer
+Different monad types correspond to different computation's properties (or behaviour). 
+But many times programmer would like a computation to display properties from multiple monad types at once, without have to declare a new monad type.
+Monad transformers solve this issue by providing a way to compose monad behaviours, to create complex ones.
+Monad transformers extend a monad's behaviour by adding on top the one related to the transformer's monad.
+For example we can apply the ```StateT``` transformer (```State``` monad transformer) to a ```IO``` monad, to obtain a computation that wraps a state but also have I/O side effects.
+
+[Monad transformers](http://book.realworldhaskell.org/read/monad-transformers.html)
+
+#### Lifting
+Lifting is a concept that help generalize a function to work with monads, or in other settings.
+```haskell
+plus :: [Int] -> [Int] -> [Int]
+plus = liftM2 (+)
+-- plus [1,2,3] [3,6,9] ---> [4,7,10, 5,8,11, 6,9,12]
+```
+For example ```liftM2 (+)``` maps the ```+``` function to a new one, able to work with monads that are instances of ```Liftable```.
+Lists represent non deterministic computations, and thus the lift of ```+``` is a function that return the list of all possible sums of the 2 lists.
+
+The ```lift``` concept comes handy also in the case of monad transformers.
+In fact, in addition to map pure functions to work with monads, ```lift``` can also map function between inner monads to work with the transformed (outer) monad.
+For example ```liftIO``` map a function that returns an ```IO``` monad to return an IO monad encapsulated in other monad transformers.
+
+[Haskell lift](https://wiki.haskell.org/Lifting)
+
 ## Comparison
 
 Since Tubes is inspired by Pipes, many base types and functions of the library have a corresponding on in the other library.
