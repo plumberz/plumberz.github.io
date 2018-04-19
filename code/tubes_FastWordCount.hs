@@ -6,14 +6,19 @@ import Tubes
 import System.IO
 import Data.Char (toLower, isAlphaNum)
 import qualified Data.HashMap.Strict as Map
+--
+-- wordcount mapReduce-style, only benefit is to reduce memory consumption
+--
 
+-- read a word from a file handle, 
+-- a word is a non-empty sequence of alphanumeric characters.
 hGetWord :: Handle -> IO String
 hGetWord handle = go [] where
     go :: String -> IO String
     go word = do
         eof <- hIsEOF $ handle
         if not eof then do
-            c <- (liftM toLower) $ hGetChar handle
+            c <- hGetChar handle
             if not $ isAlphaNum c then do -- any not alphanum is separator
                 if not (null word) then do
                     return word
@@ -24,6 +29,7 @@ hGetWord handle = go [] where
         else do
             return word
 
+-- a Source that continuosly yields words  read from a file handle. 
 wordsFromFile :: MonadIO m => Handle -> Source m String
 wordsFromFile handle = Source $ do
     eof <- liftIO $ hIsEOF handle                                 
@@ -32,10 +38,11 @@ wordsFromFile handle = Source $ do
         yield w
         sample $ wordsFromFile handle
 
+-- Open a test file and print to console a map (word : count). 
 main :: IO ()
 main = do
     handle <- openFile "test-text.txt" ReadMode
-    let words = sample $ wordsFromFile handle
+    let words = (sample $ wordsFromFile handle) >< (map $ liftM toLower) -- read words and convert to lowercase
     wcount <- reduce countWords Map.empty words
     print $ show wcount 
     where
