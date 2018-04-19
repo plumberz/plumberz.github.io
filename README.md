@@ -382,6 +382,8 @@ main = do
 ```
 
 ## Windowed Wordcount with Pipes
+**How to run the code is explained [here](code/HOW_TO_RUN.md)**
+
 We'll here describe the various attempt we made to try to create a simple timed "_wordcount_" example as the one that can be found on the examples of many stream processing engine (such as [Flink](https://ci.apache.org/projects/flink/flink-docs-release-1.4/quickstart/setup_quickstart.html)), given a tumbling window of 5 seconds and an input stream of lines of text, returns at every triggering of the window a map (word, count) where count is the number of times a certain word has been seen during the elapsed time and assuming the input data arriving in the correct order.
 
 Firstly in the large ecosystem of libraries surrounding Pipes we found [pipes-concurrent](https://hackage.haskell.org/package/pipes-concurrency-2.0.9/docs/Pipes-Concurrent.html#v:recv), which provides "_Asynchronous communication between pipes_" and makes possible the adoption of an actor model approach.
