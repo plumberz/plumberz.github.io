@@ -6,8 +6,10 @@
 Table of Contents
 =================
 
-   * [Stream Programming libraries in haskell](#stream-programming-libraries-in-haskell)
-      * [Table of Contents](#table-of-contents)
+
+Table of Contents
+=================
+
    * [Intro](#intro)
    * [The Libraries](#the-libraries)
       * [Pipes](#pipes)
@@ -30,10 +32,16 @@ Table of Contents
             * [Channel](#channel)
             * [Pump](#pump)
          * [Utilities](#utilities)
-      * [Comparison](#comparison)
-        * [Pipes](#pipes-1)
-        * [Tubes](#tubes-1)
-      * [Windowed Wordcount with Pipes](#windowed-wordcount-with-pipes)
+
+* [Theoretical takeaways](#theoretical-takeaways)
+    * [Monad](#monad)
+    * [Monad transformer](#monad-transformer)
+    * [Lifting](#lifting)
+* [Comparison](#comparison)
+    * [Pipes](#pipes-1)
+    * [Tubes](#tubes-1)
+* [Windowed Wordcount with Pipes](#windowed-wordcount-with-pipes)
+* [Conclusions](#conclusions)  
 
 # Intro
 Research conducted by Luca Lodi and Philippe Scorsolini for the course of "Principles of Programming Languages" at Politecnico di Milano by Professor Pradella Matteo and with the supervision of Riccardo Tommasini.
@@ -283,7 +291,7 @@ Among them:
 
 ## Theoretical takeaways
 
-If you are not familiar with haskell's theoretical concepts this chapter offer a brief recap of the main ones to grasp in order to understand the components of these libraries. 
+If you are not familiar with haskell's theoretical concepts this chapter offer a brief recap of the main ones to grasp in order to understand the components of these libraries.
 The concepts are presented in an intuitive rather than formal way. For a more formal explanation you can read the referred resources.
 
 #### Monad
@@ -295,7 +303,7 @@ Many types of monads exists, to represent particular properties of computations.
 [Monads in pictures](http://adit.io/posts/2013-04-17-functors,_applicatives,_and_monads_in_pictures.html)
 
 #### Monad transformer
-Different monad types correspond to different computation's properties (or behaviour). 
+Different monad types correspond to different computation's properties (or behaviour).
 But many times programmer would like a computation to display properties from multiple monad types at once, without have to declare a new monad type.
 Monad transformers solve this issue by providing a way to compose monad behaviours, to create complex ones.
 Monad transformers extend a monad's behaviour by adding on top the one related to the transformer's monad.
@@ -339,7 +347,7 @@ Both the libraries reimplement the basic operations on lists (```map```, ```filt
 
 In order to show the similarities in the concepts and the small differences in these two libraries, we implemented a Map-Reduce flavoured batch word count using both of them, taking advantage of the stream programming paradigm offered which allowed us to adopt a dataflow approach to the problem, pipelining the steps of the computation.
 
-Notice that: 
+Notice that:
 - Both the programs read a textual test file, pass that to a Produce / Source that read chucks of data, get the words, map the words to lowercase, then reduce the outputs of the pipeline incrementing the value of a map corresponding to that word.
 
 - Both the programs use the ```map``` and the ```fold```/```reduce``` utils, that has a similar syntax and semantic with respect to the Prelude version.
@@ -353,6 +361,7 @@ import Data.List.Split
 import Pipes
 import Control.Monad (forever)
 import Data.HashMap.Strict
+import Data.Char (isAlphaNum)
 import Data.Text (pack, unpack, toLower)
 import System.IO
 --
@@ -367,6 +376,7 @@ main =  withFile "test-text.txt" ReadMode $
                         (P.fromHandle file >->
                             P.map (splitOn " ") >->  -- splits the strings received and     produces a list of the words                           
                             forever (await >>= each) >->     -- each unpacks the elements of the list received by awaiting
+                            P.map (filter isAlphaNum) >->     -- strip all non alphanumeric characters
                             P.map (unpack . toLower . pack)   -- use toLower from Text to convert a string to lowercase
                             )
                         )
@@ -388,7 +398,7 @@ import qualified Data.HashMap.Strict as Map
 -- wordcount mapReduce-style, only benefit is to reduce memory consumption
 --
 
--- read a word from a file handle, 
+-- read a word from a file handle,
 -- a word is a non-empty sequence of alphanumeric characters.
 hGetWord :: Handle -> IO String
 hGetWord handle = go [] where
@@ -407,24 +417,24 @@ hGetWord handle = go [] where
         else do
             return word
 
--- a Source that continuosly yields words  read from a file handle. 
+-- a Source that continuosly yields words  read from a file handle.
 wordsFromFile :: MonadIO m => Handle -> Source m String
 wordsFromFile handle = Source $ do
     eof <- liftIO $ hIsEOF handle                                 
     unless eof $ do   
-        w <- liftIO $ hGetWord handle 
+        w <- liftIO $ hGetWord handle
         yield w
         sample $ wordsFromFile handle
 
--- Open a test file and print to console a map (word : count). 
+-- Open a test file and print to console a map (word : count).
 main :: IO ()
 main = do
     handle <- openFile "test-text.txt" ReadMode
     let words = (sample $ wordsFromFile handle) >< (map $ liftM toLower) -- read words and convert to lowercase
     wcount <- reduce countWords Map.empty words
-    print $ show wcount 
+    print $ show wcount
     where
-        countWords m word = Map.insertWith (+) word 1 m -- increment the map value for the corresponding word, or initialize word ounter to 1 
+        countWords m word = Map.insertWith (+) word 1 m -- increment the map value for the corresponding word, or initialize word ounter to 1
 ```
 
 ## Windowed Wordcount with Pipes
@@ -440,3 +450,7 @@ Therefore in the  [second attempt](code/wordcount_flink_v1.hs) we didn't use pip
 The result where good, it kept the pace of **yes**, but this time the low rate inputs were the problem. The triggering of the window was achieved by taking the time before receiving a new input and checking after having received it, if the desired time from the last triggering had passed. Clearly this approach brought to the thread indefinitely waiting for a new input and never be able to yield downward even if the window should have been triggered. This problem arose because we were checking the time at each new tuple and we were not able to trigger it from the outside, but we were still able to use the component as a Pipe and connect it to following Proxies.
 
 These considerations brought to the [third version](code/wordcount_flink_v2.hs), in which thanks to the use of [MVars](https://hackage.haskell.org/package/base-4.10.1.0/docs/Control-Concurrent-MVar.html) we separated the timer from the counter in two different threads, so that every time the timer is triggered, the timer prints the map contained in the shared MVar and resets it. Being the main thread the one awaiting for inputs and the timer's secondary thread not a Pipe, we didn't manage to yield downstream the result of the counting allowing it to be used for further computation, breaking this way the composability at the core of the library. Has to be said that in the same way as we did, the function _fold_ in the Prelude of Pipes does not produce a Pipe and cannot be further composed, so it seems to be accepted this sort of behavior, even if it doesn't fit well in the framework of the usual stream processing definition.
+
+## Conclusions
+
+In the end, with respect to the initial question we where trying to investigate, so whether or not the stream programming paradigm of the two libraries we have taken in consideration could easily be adapted to perform stream computing tasks, given their current implementations, the answer we can give is "not so easily". The semantic of stream processing as in the aforementioned distributed frameworks is hard to implement in these libraries and often a question of tradeoffs one is willing to accept. Hint of this difficulty is the great complexity of such systems that obviously surpass the complexity of a simple library as the ones we've taken in consideration. For sure the programming paradigm this kind of libraries offer is quite similar to the ones offered by the API of the various stream engine or big data framework nowadays, but the underlying architecture of these two libraries has been thought much more for batch jobs than for streaming ones and so the concept of time is completely missing and difficult to plug in, the main focus is on memory usage and single thread performance and not concurrency, even when specific libraries built on top of these exists as for pipes.
