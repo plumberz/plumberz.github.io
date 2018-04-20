@@ -48,7 +48,7 @@ All these **examples are available** [here](https://github.com/plumberz/plumberz
 Finally we came to the **conclusion** that the dataflow stream programming model of these haskell libraries is **not suitable to implement stream processing**, due to the **asynchronous and concurrent nature** of **stream processing** tasks.
 In addition, Pipes and Tubes can **only model an almost linear dataflow**, while stream processing frameworks usually handle a **generic computation graph** (directed acyclic graph).
 
- 
+
 # The Libraries
 
 ## Pipes
@@ -171,9 +171,17 @@ But the most used way to connect Proxies is surely **>->**:
 Which can be used similarly to the Unix pipe operator.
 
 Next we’ll see a basic example produced by mixing various examples in the Pipes’ tutorial , a simple main that gets strings from standard input, maps them to lower case and then prints them to standard output, showing the implementations of some parts of Pipes.Prelude.
+
+The following example can be run by ```stack runghc code/pipes-simpleexample.hs``` and then passing inputs from keyboard, e.g. `ciao CIAO` -> `ciao ciao`
+
 ```haskell
 import Pipes
-import Data.Text
+import qualified Pipes.Prelude as P
+import System.IO
+import Data.Text (pack, unpack, toLower)
+import Control.Monad (forever, unless)
+import Control.Exception (try, throwIO)
+import qualified GHC.IO.Exception as G
 
 stdinLn :: Producer String IO ()            -- as defined in Pipes.Prelude
 stdinLn = do
@@ -199,7 +207,9 @@ stdoutLn = do
 map' f = forever $ do                       -- as defined in Pipes.Prelude
   x <- await
   yield (f x)
+
 ```
+
 When all the *awaits* and *yield* have been handled, the resulting Proxy can be run, removing the lifts and returning the underlying base monad.
 ```haskell
 main :: IO ()
@@ -389,6 +399,7 @@ Notice that:
 - The composition follows a similar linear structure: ```... >-> ... >-> ...``` (Pipes) vs ```... >< ... >< ...``` (Tubes).
 
 ##### Pipes
+Code can be run by ```stack runghc code/wordcount_mapReduce.hs```  that will read input from [tets-text.txt](code/test-text.txt) and will output something like  ```[("per",2),("sociis",1),("vivamus",2),("mus",1),("montes",1),("torquent",1),("augue",11),("integer",2),("f```.
 ```haskell
 import qualified Pipes.Prelude as P
 import Data.List.Split
@@ -476,15 +487,148 @@ main = do
 
 We'll here describe the various attempt we made to try to create a simple timed "_wordcount_" example as the one that can be found on the examples of many stream processing engine (such as [Flink](https://ci.apache.org/projects/flink/flink-docs-release-1.4/quickstart/setup_quickstart.html)), given a tumbling window of 5 seconds and an input stream of lines of text, returns at every closing of the window a map {word: count, ...} where count is the number of times a certain word has been seen during the elapsed time and assuming the input data arriving in the correct order.
 
+```haskell
+module Wordcount (
+    s2r,
+    r2s,
+    wordcount,
+    timer) where
+import qualified Pipes.Prelude as P
+import System.IO
+import Control.Concurrent (forkOS, threadDelay, takeMVar, putMVar, newMVar)
+import System.Timeout
+import Control.Monad (forever)
+import Control.Concurrent.Async
+import Pipes
+import Pipes.Concurrent
+import Data.Time.Clock
+import Data.HashMap.Strict
+import Data.List.Split
+
+-- asynchronous version of wordcount, but relies on the fact that the timer allows to
+
+s2r e = loop e where
+            loop s' = do
+                tic <- await
+                case tic of
+                    Nothing -> do
+                        yield s'
+                        loop e
+                    Just x -> loop $! mappend s' $ return x
+
+wordcount = forever $ await >>= (yield . toList . fromListWith (+))
+
+r2s = forever $ await >>= each
+
+timer :: Int -> Proxy x' x () (Maybe a) IO ()
+timer t = do
+    lift $ threadDelay t
+    yield Nothing
+
+
+main :: IO ()
+main = do
+    (output, input) <- spawn unbounded
+    t1 <- async $ do
+                runEffect $ P.stdinLn >->
+                            P.map (splitOn " ") >->
+                            r2s >->
+                            P.map (\x -> (x,1)) >->
+                            P.map Just >->
+                            toOutput output
+                performGC
+    t2 <- async $ do
+                runEffect $ forever (timer 5000000) >-> toOutput output
+                performGC
+    runEffect $ fromInput input >->
+                        s2r [] >->
+                        wordcount >->
+                        r2s >->
+                        P.map show >-> P.stdoutLn
+
+```
+
 Firstly in the large ecosystem of libraries surrounding Pipes we found [pipes-concurrent](https://hackage.haskell.org/package/pipes-concurrency-2.0.9/docs/Pipes-Concurrent.html#v:recv), which provides "_Asynchronous communication between pipes_" and makes possible the adoption of an actor model approach, through the spawning of mailboxes and pieces of pipes conncted through them as separate actors.
-Therefore the [first attempt](code/Wordcount.hs) was to try to implement our wordcount using pipes-concurrent the result was quite promising at first, by passing manually strings to standard input everything seemed to work properly, but after a while we noticed that the concurrent  access to the shared mailbox used to communicate between the two pieces of the pipe in certain cases didn't behave as expected, resulting in the window never closing if the input stream kept coming at a really high rate (e.g. "**yes | ./Wordcount**"), not respecting so the chosen reporting policy.
+Therefore the [first attempt](code/Wordcount.hs) was to try to implement our wordcount using pipes-concurrent the result was quite promising at first, by passing manually strings to standard input everything seemed to work properly, but after a while we noticed that the concurrent  access to the shared mailbox used to communicate between the two pieces of the pipe in certain cases didn't behave as expected, resulting in the window never closing if the input stream kept coming at a really high rate (e.g. "**yes | stack runghc code/Wordcount.hs**"), not respecting so the chosen reporting policy.
 In fact we was feeding into the mailbox a _Maybe Char_, so that when the downstream pipe received a _Nothing_ by a timer running on a different thread and was interpreted as a signal of the closing of the window. We tried to adopt the approach of "[ The CQL continuous query language: semantic foundations and query execution](https://link.springer.com/article/10.1007%2Fs00778-004-0147-z)" by dividing the computation in s2r (stream to relation), r2r (relation to relation), r2s (relation to stream), forcing to start the execution of the part counting the words seen only after the window was triggered, accumulating all the input upstream and then passing them down. This approach due to the incremental nature of our task represented a huge performance overhead, for this reason in the following examples we looked for different approaches and opted for merging the s2r and r2r-_ish_ part into a single accumulator, that will be triggered by a timer and so yield downward its result at the desired time (obviously more or less the desired time, due to the fact, that no guarantees are given on the upper bound of the _thread delay_ ). This choice as said was due to the nature of this specific example, whereas in cases where the whole window has to  be known at the moment of the r2r operation it could surely still be applied. But the main issue remains how to trigger the window evaluation at the right time.
 
+```haskell
+import qualified Pipes.Prelude as P
+import System.IO
+import Data.Time.Clock
+import Control.Concurrent (forkOS, threadDelay, takeMVar, putMVar, newMVar)
+import Control.Concurrent.Async
+import Pipes
+import Pipes.Concurrent
+import Data.HashMap.Strict
+import Data.List.Split
+import Wordcount
+
+-- synchronous version, no output if no input after window passed
+--
+-- splitting windowing and counting in 2 steps brings to a major decrease in performance
+-- the major problem is the synchronous execution of the windowing part and the wordcount part
+
+main = do
+    hSetBuffering stdout NoBuffering
+    runEffect $ P.stdinLn >->
+                    P.map (splitOn " ") >->
+                    r2s >->
+                    windowCount 5 >->
+                    r2s >-> P.map show >-> P.stdoutLn
+
+
+windowCount w = do
+    t0 <- lift getCurrentTime
+    loop (realToFrac w) t0 empty where
+        loop w last s = do
+            x <- lift getCurrentTime
+            el <- await
+            let diff = diffUTCTime x last
+            if diff <= w
+                then loop w last $! insertWith (+) el 1 s
+                else do
+                    yield $ toList s
+                    loop w x empty
+```
 Therefore in the  [second attempt](code/wordcount_flink_v1.hs) we didn't use pipes-concurrent anymore, instead we tried a to use the standard [clock library](https://hackage.haskell.org/package/time-1.9.1/docs/Data-Time-Clock.html) from haskell, which obviously does not guarantees the exactness of the time returned by its **getCurrentTime** function, seen that it returns the system clock time, which can be modified by the user or adjusted by the system in any moment, but still, assuming an ideal situation, would be enough to prove what we are trying to show.
 The result where good, it kept the pace of **yes**, but this time the low rate inputs were the problem. The triggering of the window was achieved by taking the time before receiving a new input and checking after having received it, if the desired time from the last triggering had passed. Clearly this approach brought to the thread indefinitely waiting for a new input and never be able to yield downward even if the window should have been triggered. This problem arose because we were checking the time at each new tuple and we were not able to trigger it from the outside, but we were still able to use the component as a Pipe and connect it to following Proxies.
 
 These considerations brought to the [third version](code/wordcount_flink_v2.hs), in which thanks to the use of [MVars](https://hackage.haskell.org/package/base-4.10.1.0/docs/Control-Concurrent-MVar.html) we separated the timer from the counter in two different threads, so that every time the timer is triggered, the timer prints the map contained in the shared MVar and resets it. Being the main thread the one awaiting for inputs and the timer's secondary thread not a Pipe, we didn't manage to yield downstream the result of the counting allowing it to be used for further computation, breaking this way the composability at the core of the library. Has to be said that in the same way as we did, the function _fold_ in the Prelude of Pipes does not produce a Pipe and cannot be further composed, so it seems to be accepted this sort of behavior, even if it doesn't fit well in the framework of the usual stream processing definition.
 
+```haskell
+import qualified Pipes.Prelude as P
+import System.IO
+import Control.Concurrent (threadDelay, takeMVar, putMVar, newMVar)
+import Control.Concurrent.Async
+import Pipes
+import Data.HashMap.Strict
+import Data.List.Split
+import Wordcount (r2s)
+-- Asynchronous version that does not output if the main thread has ended
+-- By unifying the windowing and the counting we achieve a considerable performance boost,
+
+main :: IO ()
+main = runEffect $ P.stdinLn >-> P.map (splitOn " ") >-> r2s >-> timedWindow 5000000
+
+timedWindow t = do
+        v <- lift $ newMVar empty
+        lift $ async $ timer' t v empty
+        wordcount' empty v
+
+timer' w v e = do
+    threadDelay w
+    c <- takeMVar v
+    print $ toList c
+    putMVar v e
+    timer' w v e
+
+wordcount' e v = do
+    x <- await
+    s' <- lift $ takeMVar v
+    lift $ putMVar v $ insertWith (+) x 1 s'
+    wordcount' e v
+```
 ## Conclusions
 
 In the end, with respect to the initial question we where trying to investigate, so whether or not the stream programming paradigm of the two libraries we have taken in consideration could easily be adapted to perform stream computing tasks, given their current implementations, the answer we can give is "not so easily". The semantic of stream processing as in the aforementioned distributed frameworks is hard to implement in these libraries and often a question of tradeoffs one is willing to accept. Hint of this difficulty is the great complexity of such systems that obviously surpass the complexity of a simple library as the ones we've taken in consideration. For sure the programming paradigm this kind of libraries offer is quite similar to the ones offered by the API of the various stream engine or big data framework nowadays, but the underlying architecture of these two libraries has been thought much more for batch jobs than for streaming ones and so the concept of time is completely missing and difficult to plug in, the main focus is on memory usage and single thread performance and not concurrency, even when specific libraries built on top of these exists as for pipes.
