@@ -156,9 +156,17 @@ But the most used way to connect Proxies is surely **>->**:
 Which can be used similarly to the Unix pipe operator.
 
 Next we’ll see a basic example produced by mixing various examples in the Pipes’ tutorial , a simple main that gets strings from standard input, maps them to lower case and then prints them to standard output, showing the implementations of some parts of Pipes.Prelude.
+
+The following example can be run by ```stack runghc code/pipes-simpleexample.hs``` and then passing inputs from keyboard, e.g. `ciao CIAO` -> `ciao ciao`
+
 ```haskell
 import Pipes
-import Data.Text
+import qualified Pipes.Prelude as P
+import System.IO
+import Data.Text (pack, unpack, toLower)
+import Control.Monad (forever, unless)
+import Control.Exception (try, throwIO)
+import qualified GHC.IO.Exception as G
 
 stdinLn :: Producer String IO ()            -- as defined in Pipes.Prelude
 stdinLn = do
@@ -184,7 +192,9 @@ stdoutLn = do
 map' f = forever $ do                       -- as defined in Pipes.Prelude
   x <- await
   yield (f x)
+
 ```
+
 When all the *awaits* and *yield* have been handled, the resulting Proxy can be run, removing the lifts and returning the underlying base monad.
 ```haskell
 main :: IO ()
@@ -374,6 +384,7 @@ Notice that:
 - The composition follows a similar linear structure: ```... >-> ... >-> ...``` (Pipes) vs ```... >< ... >< ...``` (Tubes).
 
 ##### Pipes
+Code can be run by ```stack runghc code/wordcount_mapReduce.hs```  that will read input from [tets-text.txt](code/test-text.txt) and will output something like  ```[("per",2),("sociis",1),("vivamus",2),("mus",1),("montes",1),("torquent",1),("augue",11),("integer",2),("f```.
 ```haskell
 import qualified Pipes.Prelude as P
 import Data.List.Split
