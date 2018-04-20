@@ -227,10 +227,22 @@ A tube represent a computation that can **await** elements from upstream and **y
 ```haskell
 Tube a b m r
 ```
- A general tube awaits elements of type **a**, yields elements of type **b**, performing a computation **m** that return a result of type **r**.
-Tubes can be composed using the (```><```) operator, to obtain a new tube.
-Is possible to obtain a monad ```m r``` from a ```Tube () () m r``` using the ```runTube``` function, or get a value from a tube that yield data with the ```reduce :: Monad m => (b -> a -> b) -> b -> Tube () a m () -> m b``` function.  
+A general tube awaits elements of type **a**, yields elements of type **b**, performing a computation **m** that return a result of type **r**.
+
 The library provide 3 **subclasses** of tube type: **source**, **channel**, **sink**.
+Each subclass has a different method to obtain the corresponding Tube:
+- ```sample```: Tube from Source
+- ```tune```: Tube from Channel
+- ```pour```: Tube from Sink
+
+![recap](tubes_recap.png)
+
+Tubes can be composed using the (```><```) operator, to obtain a new tube.
+
+Is possible to obtain a monad ```m r``` from a ```Tube () () m r``` using the ```runTube``` function, or get a value from a tube that yield data with the ```reduce :: Monad m => (b -> a -> b) -> b -> Tube () a m () -> m b``` function.  
+
+![reduce](tubes_reduce.png)
+
 
 #### Source
 ```haskell
@@ -238,6 +250,9 @@ Source (m :: * -> *) a = Source {sample :: Tube () a m ()}
 ```
 Sources are a specialization of Tube that can only ```yield``` elements downstream.
 The ```sample``` function is used to get the ```Tube``` corresponding to a ```Source```.
+
+![merge](tubes_merge.png)
+
 A source can be synchronously merged with another using the ```merge :: Monad m => Source m a -> Source m a -> Source m a```. In this case the resoulting Source will yield elements from the two Sources (alternating), untill they both have no elements left.
 
 #### Sink
@@ -315,7 +330,9 @@ For example ```liftIO``` map a function that returns an ```IO``` monad to return
 
 ## Comparison
 
-Since Tubes is inspired by Pipes, many base types and functions of the library have a corresponding on in the other library.
+#### Types
+
+Since Tubes is inspired by Pipes, many base types and functions of the library have a corresponding type in the other library.
 
 | *Pipes*  	| *Tubes*                                            	|
 |----------	|----------------------------------------------------	|
@@ -327,9 +344,25 @@ Since Tubes is inspired by Pipes, many base types and functions of the library h
 
 Note that unlike ```Proxy```, ```Tube``` is mono-directional.
 
+#### Communication
+
 The communication between Proxy / Tube use the very same primitives ```yield``` and ```await``` with the same semantic.
 
+#### Composition
+
+Composition in Pipes can be performed both between Proxies and between Producers/Pipes/Consumers thanks to Rank-N ghc extension, via the ```>->``` operator.
+
+On the contrary, in Tubes the ```><``` operator can compose only matching Tubes. Thus is necessary to obtain the corresponding Tube from a Source/Channel/Sink via ```sample```/```tune```/```pour``` before applying the composition.
+
+![tubes_recap](tubes_recap.png)
+
+So the Pipes equivalent of this picture would not need the transformation between subclasses and Proxy, but would apply the composition operator directly between Producer/Pipe/Consumer thanks to Rank-N ghc extension.
+
+#### Prelude functions
+
 Both the libraries reimplement the basic operations on lists (```map```, ```filter```, ...) containted in ```Prelude``` in terms of ```Proxy``` / ```Tube```. Pipes define these functions in ```Pipes.Prelude```, Tubes inside ```Tubes.Util```.
+
+#### Batch use case
 
 In order to show the similarities in the concepts and the small differences in these two libraries, we implemented a Map-Reduce flavoured batch word count using both of them, taking advantage of the stream programming paradigm offered which allowed us to adopt a dataflow approach to the problem, pipelining the steps of the computation.
 
@@ -340,7 +373,7 @@ Notice that:
 
 - The composition follows a similar linear structure: ```... >-> ... >-> ...``` (Pipes) vs ```... >< ... >< ...``` (Tubes).
 
-#### Pipes
+##### Pipes
 ```haskell
 import qualified Pipes.Prelude as P
 import Data.List.Split
@@ -370,7 +403,7 @@ main =  withFile "test-text.txt" ReadMode $
 
 ```
 
-#### Tubes
+##### Tubes
 ```haskell
 import Prelude hiding (map, filter, reduce)
 import qualified Prelude as P
