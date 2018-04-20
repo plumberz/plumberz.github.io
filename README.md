@@ -447,7 +447,7 @@ Notice that:
 - The composition follows a similar linear structure: ```... >-> ... >-> ...``` (Pipes) vs ```... >< ... >< ...``` (Tubes).
 
 ##### Pipes
-Code can be run by ```stack runghc code/wordcount_mapReduce.hs```  that will read input from [tets-text.txt](code/test-text.txt) and will output something like  ```[("per",2),("sociis",1),("vivamus",2),("mus",1),("montes",1),("torquent",1),("augue",11),("integer",2),("f```.
+Code can be run by ```stack runghc code/wordcount_mapReduce.hs```  that will read input from [tets-text.txt](code/test-text.txt) and will output something like  ```[("per",2),("sociis",1),("vivamus",2),("mus",1),("montes",1),("torquent",1),("augue",11),("integer",2),("f ...```.
 ```haskell
 import qualified Pipes.Prelude as P
 import Data.List.Split
@@ -478,6 +478,10 @@ main =  withFile "test-text.txt" ReadMode $
 ```
 
 ##### Tubes
+
+Code can be run by ```stack runghc code/tubes_FastWordCount.hs```  that will read input from [tets-text.txt](code/test-text.txt) and will output something like  ```"fromList [(\"per\",2),(\"sociis\",1),(\"vivamus\",2),(\"mus\",1),(\"montes\",1),(\"torquent\",1),(\"augue\",11),(\"integer\",2),(\"f ...```
+
+
 ```haskell
 import Prelude hiding (map, filter, reduce)
 import qualified Prelude as P
