@@ -280,6 +280,18 @@ The ```sample``` function is used to get the ```Tube``` corresponding to a ```So
 
 A source can be synchronously merged with another using the ```merge :: Monad m => Source m a -> Source m a -> Source m a```. In this case the resoulting Source will yield elements from the two Sources (alternating), untill they both have no elements left.
 
+```haskell
+charsFromFile :: MonadIO m => Handle -> Source m Char
+charsFromFile handle = Source $ do
+    eof <- liftIO . hIsEOF $ handle
+    unless eof $ do
+        c <- liftIO $ hGetChar handle
+        yield c
+        sample $ charsFromFile handle
+```
+
+This example shows how to build a Source that yields characters read from a file handle.
+
 #### Sink
 ```haskell
 Sink (m :: * -> *) a = Sink {pour :: Tube a () m ()}
@@ -294,6 +306,43 @@ Channel (m :: * -> *) a b = Channel {tune :: Tube a b m ()}
 ```
 ```Channel``` is a Tube that can convert values, while performing a monadic computation.
 While it can independently ```await``` and ```yield``` elements, it can be considered as an ```Arrow``` if it yields exactly once after awaiting.
+
+```haskell
+split_words :: Monad m => Char -> Channel m Char String 
+split_words separator = Channel $ go [] where
+    go w_acc = do
+        c <- await
+        if c == separator then do
+            unless (null w_acc) $ yield (reverse w_acc)
+            go []
+        else do
+            let w_acc' = c : w_acc
+            go w_acc'
+```
+
+In the example a custom Channel awaits characters from upstream and yields a word (String) only once a split character is received.
+
+```haskell
+validChar :: Char -> Bool
+validChar c = (c==' ') || (isAlphaNum c)
+
+word2KV w = (w,1) -- returns a (word:1) pair
+
+myTube handle = sample (charsFromFile handle)
+    >< map toLower
+    >< filter validChar 
+    >< tune (split_words ' ')
+    >< map word2KV
+```
+
+Notice that different Channels can be composed to form a complex Tube. In this case the tube ```myTube``` (that depends on a file handle) is the composition of one Source and 3 Cannels.
+1. Source: read characters one by onefrom the handle.
+2. Channel: map charachters to lowercase
+3. Channel: filter out invalid (non alphanumerical) character.
+4. Channel: accumulate characters and yield words to next stage.
+5. Channel: transform incoming words (String) into (word:1) pairs.
+
+This Tube can be thought to perform the preprocessing part of a map-reduce computation, as it yields key:value pairs.
 
 #### Pump
 ```haskell
