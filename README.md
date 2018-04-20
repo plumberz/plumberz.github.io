@@ -2,11 +2,6 @@
 
 # Stream Programming libraries in haskell
 
-
-Table of Contents
-=================
-
-
 Table of Contents
 =================
 
@@ -16,21 +11,12 @@ Table of Contents
          * [Types](#types)
             * [Proxy](#proxy)
             * [Concrete type synonyms](#concrete-type-synonyms)
-               * [Effect](#effect)
-               * [Producer](#producer)
-               * [Consumer](#consumer)
-               * [Pipe](#pipe)
-               * [Polymorphic synonyms](#polymorphic-synonyms)
+                * [Polymorphic synonyms](#polymorphic-synonyms)
          * [Communication](#communication)
          * [Composition](#composition)
       * [Tubes](#tubes)
          * [Intuition](#intuition)
          * [Types](#types-1)
-            * [Tube](#tube)
-            * [Source](#source)
-            * [Sink](#sink)
-            * [Channel](#channel)
-            * [Pump](#pump)
          * [Utilities](#utilities)
 
 * [Theoretical takeaways](#theoretical-takeaways)
