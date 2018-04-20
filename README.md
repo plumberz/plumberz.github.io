@@ -2,11 +2,6 @@
 
 # Stream Programming libraries in haskell
 
-
-Table of Contents
-=================
-
-
 Table of Contents
 =================
 
