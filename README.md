@@ -34,6 +34,22 @@ Research conducted by Luca Lodi and Philippe Scorsolini for the course of "Princ
 
 In this post we'll try to examine two haskell "stream processing" libraries, [Pipes](https://hackage.haskell.org/package/pipes) and[Tubes](https://hackage.haskell.org/package/tubes), investigating whether or not they can be used and/or adapted to perform "stream processing", to be meant as in systems as Flink, Spark Streaming, Kafka and others.
 
+#### Spoiler alert ! [TL;DR]
+After playing with the two libraries (Pipes and Tubes) and understanding their structure, we implemented a simple word count example to compare the two libraries.
+This example is meaningful to highlight the many similarities and the few differences between the two libraries.
+
+Then we tried to modify the two word count codes to support a Flink-style time windowing.
+However, we soon found out that the stream programming model implemented by the libraries is perfectly synchronous, and so can't be exploited to deal with time. In fact Pipes and Tubes consider streaming as a way to break down a complex computation into simpler composable stages (dataflow paradigm), that form a pipeline able to work on a huge amount of data with a small memory footprint.
+
+For these reasons, we implemented the time-window Flink-style word count only in a Pipes-derived library called pipes-concurrency, that extends Pipes with an asynchronous dataflow model (inpired by the actor model). This let us easily implement the use case.
+
+All these examples are available [here](https://github.com/plumberz/plumberz.github.io/tree/master/code) with the relative guide on [how to run](code/HOW_TO_RUN.md) them.
+
+Finally we came to the conclusion that the dataflow stream programming model of these haskell libraries is not suitable to implement stream processing, due to the asynchronous and concurrent
+nature of stream processing tasks.
+In addition, Pipes and Tubes can only model an almost linear dataflow, while stream processing frameworks usually handle a generic computation graph (directed acyclic graph).
+
+ 
 # The Libraries
 
 ## Pipes
