@@ -69,6 +69,14 @@ data Proxy a' a b' b m r
     | Respond b  (b' -> Proxy a' a b' b m r )
     | M          (m    (Proxy a' a b' b m r))
     | Pure r
+
+```
+As we can see Proxy is defined as a **sum type** with 4 different possible data constructors: Request, Respond, M and Pure. Not much is said in the documentation about them, but they are used mainly as a mean to decide which behavior to apply in the various instance definition of Proxy and are transparent to  the end  user of the library otherwise.
+
+Proxy is defined as an instance of many type classes, as can be seen here:
+
+```haskell
+
 instance Monad m => Applicative (Proxy a' a b' b m)
 instance Monad m => Functor (Proxy a' a b' b m)
 instance Monad m => Monad (Proxy a' a b' b m)
@@ -79,6 +87,11 @@ instance MMonad (Proxy a' a b' b) -- Defined in ‘Pipes.Internal’
 instance MonadIO m => MonadIO (Proxy a' a b' b m)
 instance MonadTrans (Proxy a' a b' b)
 ```
+
+Obviously it is an instance of Applicative, Functor, Monad and MonadIO, but these are all common in the haskell world. Much more exotic are the MFunctor, MMonad and MonadTrans instances definitions (monad transformers will be explained later). All of them comes from the [mmorph: Monad morphism](https://hackage.haskell.org/package/mmorph-1.0.0/docs/Control-Monad-Morph.html#t:MMonad) package which defines monad morphisms related utilities.
+Monad morphisms commonly arise when manipulating existing monad transformer code for compatibility purposes. The MFunctor, MonadTrans and MMonad classes define standard ways to change monad transformer stacks through lift, squash and hoist.
+MonadTrans definition can be also found in [transformers](https://hackage.haskell.org/package/transformers-0.3.0.0/docs/Control-Monad-Trans-Maybe.html#t:MaybeT) package.
+
 A ’Proxy’ receives and sends information both upstream and downstream:
 
 -   **upstream interface**: receives *a* and send *a’*
@@ -91,14 +104,21 @@ A ’Proxy’ receives and sends information both upstream and downstream:
 
 #### Concrete type synonyms
 
-Pipes offers many concrete type synonyms for ’Proxy’ specializing further its more generic signature. Defined **X** the empty type, used to close output ends.
+Pipes offers many concrete type synonyms for ’Proxy’ specializing further its more generic signature.
+
+Defined X as the empty type, used to close output ends:
+```haskell
+type X = Void
+```
 
 ##### Effect
 ```haskell
 -- Defined in ‘Pipes.Core’
 type Effect = Proxy X () () X :: (* -> *) -> * -> *
 ```
+
 Which represents an effect in the base monad, modeling a non-streaming component, and can be *run*, converting it back to the base monad through:
+
 ```haskell
 runEffect :: Monad m => Effect m r -> m r
 ```
@@ -210,6 +230,7 @@ map' f = forever $ do                       -- as defined in Pipes.Prelude
 ```
 
 When all the *awaits* and *yield* have been handled, the resulting Proxy can be run, removing the lifts and returning the underlying base monad.
+
 ```haskell
 main :: IO ()
 main = runEffect $ stdinLn >->
@@ -217,6 +238,9 @@ main = runEffect $ stdinLn >->
                               -- unpack :: Text -> String viceversa
                     stdoutLn
 ```
+We have used 3 functions from the text package which many use to overload the String implementation as a list of Char with Text, a much more "A time and space-efficient implementation of Unicode text. Suitable for performance critical use, both in terms of large data quantities and high speed." (e.g. [A sensible starting Prelude template.](https://github.com/sdiehl/protolude), [OverloadedStrings ghc extension](https://www.schoolofhaskell.com/school/to-infinity-and-beyond/pick-of-the-week/guide-to-ghc-extensions/basic-syntax-extensions#overloadedstrings))
+But here we are just using pack to convert a String to Text, toLower from the same package to convert the Text to lowercase and then unpack to convert it back to String. Using the ghc extension, packing and unpacking could be avoided thanks to the polymorphic definition of String it introduces.
+
 Applying a monad transformer to a monad returns a monad, as we already said, so obviously results can be composed using the usual *bind* operator (>>=).
 
 ## Tubes
@@ -307,7 +331,7 @@ Channel (m :: * -> *) a b = Channel {tune :: Tube a b m ()}
 While it can independently ```await``` and ```yield``` elements, it can be considered as an ```Arrow``` if it yields exactly once after awaiting.
 
 ```haskell
-split_words :: Monad m => Char -> Channel m Char String 
+split_words :: Monad m => Char -> Channel m Char String
 split_words separator = Channel $ go [] where
     go w_acc = do
         c <- await
@@ -329,7 +353,7 @@ word2KV w = (w,1) -- returns a (word:1) pair
 
 myTube handle = sample (charsFromFile handle)
     >< map toLower
-    >< filter validChar 
+    >< filter validChar
     >< tune (split_words ' ')
     >< map word2KV
 ```
@@ -600,9 +624,15 @@ main = do
 
 ```
 
-Firstly in the large ecosystem of libraries surrounding Pipes we found [pipes-concurrent](https://hackage.haskell.org/package/pipes-concurrency-2.0.9/docs/Pipes-Concurrent.html#v:recv), which provides "_Asynchronous communication between pipes_" and makes possible the adoption of an actor model approach, through the spawning of mailboxes and pieces of pipes conncted through them as separate actors.
-Therefore the [first attempt](code/Wordcount.hs) was to try to implement our wordcount using pipes-concurrent the result was quite promising at first, by passing manually strings to standard input everything seemed to work properly, but after a while we noticed that the concurrent  access to the shared mailbox used to communicate between the two pieces of the pipe in certain cases didn't behave as expected, resulting in the window never closing if the input stream kept coming at a really high rate (e.g. "**yes | stack runghc code/Wordcount.hs**"), not respecting so the chosen reporting policy.
-In fact we was feeding into the mailbox a _Maybe Char_, so that when the downstream pipe received a _Nothing_ by a timer running on a different thread and was interpreted as a signal of the closing of the window. We tried to adopt the approach of "[ The CQL continuous query language: semantic foundations and query execution](https://link.springer.com/article/10.1007%2Fs00778-004-0147-z)" by dividing the computation in s2r (stream to relation), r2r (relation to relation), r2s (relation to stream), forcing to start the execution of the part counting the words seen only after the window was triggered, accumulating all the input upstream and then passing them down. This approach due to the incremental nature of our task represented a huge performance overhead, for this reason in the following examples we looked for different approaches and opted for merging the s2r and r2r-_ish_ part into a single accumulator, that will be triggered by a timer and so yield downward its result at the desired time (obviously more or less the desired time, due to the fact, that no guarantees are given on the upper bound of the _thread delay_ ). This choice as said was due to the nature of this specific example, whereas in cases where the whole window has to  be known at the moment of the r2r operation it could surely still be applied. But the main issue remains how to trigger the window evaluation at the right time.
+Firstly in the large ecosystem of libraries surrounding Pipes we found [pipes-concurrent](https://hackage.haskell.org/package/pipes-concurrency-2.0.9/docs/Pipes-Concurrent.html#v:recv), which provides "_Asynchronous communication between pipes_" and makes possible the adoption of an actor model approach, through the spawning of mailboxes and pieces of pipes which communicate through these as separate actors.
+
+Therefore the [first attempt](code/Wordcount.hs) was to try to implement our wordcount using **pipes-concurrent** the result was quite promising at first, by passing manually strings to standard input everything seemed to work properly, but after a while we noticed that the concurrent  access to the shared mailbox used to communicate between the two pieces of the pipe in certain cases didn't behave as expected, resulting in the **window never closing** if the input stream kept coming at a really **high rate*** (e.g. "**yes | stack runghc code/Wordcount.hs**"), breaking the chosen reporting policy, not reporting at all.
+
+We were feeding into the mailbox a _Maybe Char_, so that when the downstream pipe received a _Nothing_ by a timer running on a different thread and was interpreted as a signal of the closing of the window.
+
+At the same time we tried to adopt the approach of "[ The CQL continuous query language: semantic foundations and query execution](https://link.springer.com/article/10.1007%2Fs00778-004-0147-z)" by dividing the computation in **s2r** (stream to relation), **r2r** (relation to relation), **r2s** (relation to stream), forcing to start the execution of the part counting the words seen only after the window was triggered, accumulating all the input upstream and then passing them down. This approach due to the incremental nature of our task represented a **huge performance overhead**, for this reason in the following examples we looked for different approaches and opted for **merging the s2r and r2r-_ish_ part** into a single accumulator, that will be triggered by a timer and so yield downstream its result at the desired time (obviously more or less the desired time, due to the fact, that no guarantees are given on the upper bound of the _thread delay_ ). This choice as said was due to the nature of this specific example, whereas in cases where the whole window has to  be known at the moment of the r2r operation it could surely still be applied. It has to be said that only the performance were worsened by this approach, not the correctness of the results, obviously.
+
+We have to recognize that the biggest issue we found was due to the introduction of time and asynchronicity, so how to practically trigger the window evaluation at the right time was the biggest question.
 
 ```haskell
 import qualified Pipes.Prelude as P
@@ -643,10 +673,14 @@ windowCount w = do
                     yield $ toList s
                     loop w x empty
 ```
-Therefore in the  [second attempt](code/wordcount_flink_v1.hs) we didn't use pipes-concurrent anymore, instead we tried a to use the standard [clock library](https://hackage.haskell.org/package/time-1.9.1/docs/Data-Time-Clock.html) from haskell, which obviously does not guarantees the exactness of the time returned by its **getCurrentTime** function, seen that it returns the system clock time, which can be modified by the user or adjusted by the system in any moment, but still, assuming an ideal situation, would be enough to prove what we are trying to show.
-The result where good, it kept the pace of **yes**, but this time the low rate inputs were the problem. The triggering of the window was achieved by taking the time before receiving a new input and checking after having received it, if the desired time from the last triggering had passed. Clearly this approach brought to the thread indefinitely waiting for a new input and never be able to yield downward even if the window should have been triggered. This problem arose because we were checking the time at each new tuple and we were not able to trigger it from the outside, but we were still able to use the component as a Pipe and connect it to following Proxies.
+Therefore in the  **[second attempt](code/wordcount_flink_v1.hs)** we didn't use pipes-concurrent anymore, instead we tried a to **use the standard [clock library](https://hackage.haskell.org/package/time-1.9.1/docs/Data-Time-Clock.html) from haskell,** which obviously does not guarantees the exactness of the time returned by its **getCurrentTime** function, seen that it returns the system clock time, which can be modified by the user or adjusted by the system in any moment, but still, assuming an ideal situation, would be enough to prove what we are trying to show.
 
-These considerations brought to the [third version](code/wordcount_flink_v2.hs), in which thanks to the use of [MVars](https://hackage.haskell.org/package/base-4.10.1.0/docs/Control-Concurrent-MVar.html) we separated the timer from the counter in two different threads, so that every time the timer is triggered, the timer prints the map contained in the shared MVar and resets it. Being the main thread the one awaiting for inputs and the timer's secondary thread not a Pipe, we didn't manage to yield downstream the result of the counting allowing it to be used for further computation, breaking this way the composability at the core of the library. Has to be said that in the same way as we did, the function _fold_ in the Prelude of Pipes does not produce a Pipe and cannot be further composed, so it seems to be accepted this sort of behavior, even if it doesn't fit well in the framework of the usual stream processing definition.
+The result where good, it kept the pace of **yes**, but this time the **low rate inputs were the problem**.
+The triggering of the window was achieved by taking the time before receiving a new input and checking after having received it, if the desired time from the last triggering had passed. Clearly this approach brought to the thread indefinitely waiting for a new input and **never be able to yield downstream** even if the window should have been triggered. This problem arose because we were checking the time at each new tuple and we were not able to trigger it from the outside, but we were still able to use the component as a Pipe and connect it to following Proxies.
+
+These considerations brought to the **[third version](code/wordcount_flink_v2.hs)** and through the use of **[MVars](https://hackage.haskell.org/package/base-4.10.1.0/docs/Control-Concurrent-MVar.html)** we managed to **separate the timer from the counter** in two different threads. Doing so every time the timer is triggered, the timer prints the map contained in the shared MVar and resets it.
+
+Being the main thread the one awaiting for inputs and the timer's secondary thread not a Pipe, we didn't manage to yield downstream the result of the counting allowing it to be used for further computation, **breaking this way the composability at the core of the library**. Has to be said that in the **same++ way as we did, the function **_fold_ in the Prelude of Pipes** does not produce a Pipe and cannot be further composed, so it seems to be accepted this sort of behavior, even if it doesn't fit well in the framework of the usual stream processing definition.
 
 ```haskell
 import qualified Pipes.Prelude as P
