@@ -2,36 +2,72 @@
 
 # Stream Programming libraries in haskell
 
-Table of Contents
-=================
-
 * [Intro](#intro)
+  * [Theoretical background](#theoretical-background)
 * [The Libraries](#the-libraries)
   * [Pipes](#pipes)
-       * [Types](#types)
-          * [Proxy](#proxy)
-          * [Concrete type synonyms](#concrete-type-synonyms)
-          * [Polymorphic synonyms](#polymorphic-synonyms)
-       * [Communication](#communication)
-       * [Composition](#composition)
   * [Tubes](#tubes)
-     * [Intuition](#intuition)
-     * [Types](#types-1)
-     * [Utilities](#utilities)
-* [Theoretical takeaways](#theoretical-takeaways)
-    * [Monad](#monad)
-    * [Monad transformer](#monad-transformer)
-    * [Lifting](#lifting)
-* [Comparison](#comparison)
-    * [Pipes](#pipes-1)
-    * [Tubes](#tubes-1)
-* [Windowed Wordcount with Pipes](#windowed-wordcount-with-pipes)
-* [Conclusions](#conclusions)  
+  * [Comparison](#comparison)
+  * [Windowed Wordcount with Pipes](#windowed-wordcount-with-pipes)
+* [Conclusions](#conclusions)
 
 # Intro
 Research conducted by Luca Lodi and Philippe Scorsolini for the course of "Principles of Programming Languages" at Politecnico di Milano by Professor Pradella Matteo and with the supervision of Riccardo Tommasini.
 
 In this post we'll try to examine two haskell "stream processing" libraries, [Pipes](https://hackage.haskell.org/package/pipes) and[Tubes](https://hackage.haskell.org/package/tubes), investigating whether or not they can be used and/or adapted to perform "stream processing", to be meant as in systems as Flink, Spark Streaming, Kafka and others.
+
+## Theoretical background
+
+If you are not familiar with haskell's theoretical concepts this chapter offer a brief recap of the main ones to grasp in order to understand the components of these libraries.
+The concepts are presented in an intuitive rather than formal way. For a more formal explanation you can read the referred resources.
+
+#### Kinds
+"In type theory, a kind is the type of a type constructor or, less commonly, the type of a higher-order type operator. A kind system is essentially a simply typed lambda calculus 'one level up,' endowed with a primitive type, denoted * and called 'type', which is the kind of any (monomorphic) data type" [cit.](https://wiki.haskell.org/Kind)
+Ordinary types, also called monotypes or nullary type constructors, have kind \*. Higher order type constructors have kinds of the form P -> Q, where P and Q are kinds.
+```haskell
+Int :: *
+Maybe :: * -> *
+Maybe Bool :: *
+a -> a :: *
+[] :: * -> *
+(->) :: * -> * -> *
+```
+In Haskell 98, * is the only inhabited kind, that is, all values have types of kind "\*".
+
+In shorter terms kinds define the signatures of type constructors, indicating what they need to build a "\*" (aka concrete) kind, very much in the same way as functions signatures show what the functions can take and what it will produce. Kinds can be curried too: ```Either :: * -> * -> *``` can be partially applied ```Either String :: * -> *``` and then again to obtain a concrete kind ```Either String Int :: *```.
+
+#### Monad
+Monads represents computations that can wrap values and potentially have side effects.
+For example reading a character from a file is a computation with side effect (```IO Char``` monad).
+Computations (monads) can be composed to obtain new more complex computations.
+Many types of monads exists, to represent particular properties of computations. For example computation with input/output side-effects are represented as ```IO``` monads, while computations that wrap a state are based on the ```State``` monad.
+
+[Monads in pictures](http://adit.io/posts/2013-04-17-functors,_applicatives,_and_monads_in_pictures.html)
+
+#### Monad transformer
+Different monad types correspond to different computation's properties (or behaviour).
+But many times programmer would like a computation to display properties from multiple monad types at once, without have to declare a new monad type.
+Monad transformers solve this issue by providing a way to compose monad behaviours, to create complex ones.
+Monad transformers extend a monad's behaviour by adding on top the one related to the transformer's monad.
+For example we can apply the ```StateT``` transformer (```State``` monad transformer) to a ```IO``` monad, to obtain a computation that wraps a state but also have I/O side effects.
+
+[Monad transformers](http://book.realworldhaskell.org/read/monad-transformers.html)
+
+#### Lifting
+Lifting is a concept that help generalize a function to work with monads, or in other settings.
+```haskell
+plus :: [Int] -> [Int] -> [Int]
+plus = liftM2 (+)
+-- plus [1,2,3] [3,6,9] ---> [4,7,10, 5,8,11, 6,9,12]
+```
+For example ```liftM2 (+)``` maps the ```+``` function to a new one, able to work with monads that are instances of ```Liftable```.
+Lists represent non deterministic computations, and thus the lift of ```+``` is a function that return the list of all possible sums of the 2 lists.
+
+The ```lift``` concept comes handy also in the case of monad transformers.
+In fact, in addition to map pure functions to work with monads, ```lift``` can also map function between inner monads to work with the transformed (outer) monad.
+For example ```liftIO``` map a function that returns an ```IO``` monad to return an IO monad encapsulated in other monad transformers.
+
+[Haskell lift](https://wiki.haskell.org/Lifting)
 
 #### TL;DR (Spoiler alert!)
 After **playing with the two libraries** (Pipes and Tubes) and **understanding their structure**, we implemented a simple **word count example** to **compare the two libraries**.
@@ -386,59 +422,6 @@ Among them:
 - ```display``` is a Sink that continuosly output the awaited element to the console.
 - ```each``` yield each element in a foldable
 - ```every``` is like each, but return the element wrapped in a ```Maybe```.
-
-## Theoretical takeaways
-
-If you are not familiar with haskell's theoretical concepts this chapter offer a brief recap of the main ones to grasp in order to understand the components of these libraries.
-The concepts are presented in an intuitive rather than formal way. For a more formal explanation you can read the referred resources.
-
-#### Kinds
-"In type theory, a kind is the type of a type constructor or, less commonly, the type of a higher-order type operator. A kind system is essentially a simply typed lambda calculus 'one level up,' endowed with a primitive type, denoted * and called 'type', which is the kind of any (monomorphic) data type" [cit.](https://wiki.haskell.org/Kind)
-Ordinary types, also called monotypes or nullary type constructors, have kind \*. Higher order type constructors have kinds of the form P -> Q, where P and Q are kinds.
-```haskell
-Int :: *
-Maybe :: * -> *
-Maybe Bool :: *
-a -> a :: *
-[] :: * -> *
-(->) :: * -> * -> *
-```
-In Haskell 98, * is the only inhabited kind, that is, all values have types of kind "\*".
-
-In shorter terms kinds define the signatures of type constructors, indicating what they need to build a "\*" (aka concrete) kind, very much in the same way as functions signatures show what the functions can take and what it will produce. Kinds can be curried too: ```Either :: * -> * -> *``` can be partially applied ```Either String :: * -> *``` and then again to obtain a concrete kind ```Either String Int :: *```.
-
-#### Monad
-Monads represents computations that can wrap values and potentially have side effects.
-For example reading a character from a file is a computation with side effect (```IO Char``` monad).
-Computations (monads) can be composed to obtain new more complex computations.
-Many types of monads exists, to represent particular properties of computations. For example computation with input/output side-effects are represented as ```IO``` monads, while computations that wrap a state are based on the ```State``` monad.
-
-[Monads in pictures](http://adit.io/posts/2013-04-17-functors,_applicatives,_and_monads_in_pictures.html)
-
-#### Monad transformer
-Different monad types correspond to different computation's properties (or behaviour).
-But many times programmer would like a computation to display properties from multiple monad types at once, without have to declare a new monad type.
-Monad transformers solve this issue by providing a way to compose monad behaviours, to create complex ones.
-Monad transformers extend a monad's behaviour by adding on top the one related to the transformer's monad.
-For example we can apply the ```StateT``` transformer (```State``` monad transformer) to a ```IO``` monad, to obtain a computation that wraps a state but also have I/O side effects.
-
-[Monad transformers](http://book.realworldhaskell.org/read/monad-transformers.html)
-
-#### Lifting
-Lifting is a concept that help generalize a function to work with monads, or in other settings.
-```haskell
-plus :: [Int] -> [Int] -> [Int]
-plus = liftM2 (+)
--- plus [1,2,3] [3,6,9] ---> [4,7,10, 5,8,11, 6,9,12]
-```
-For example ```liftM2 (+)``` maps the ```+``` function to a new one, able to work with monads that are instances of ```Liftable```.
-Lists represent non deterministic computations, and thus the lift of ```+``` is a function that return the list of all possible sums of the 2 lists.
-
-The ```lift``` concept comes handy also in the case of monad transformers.
-In fact, in addition to map pure functions to work with monads, ```lift``` can also map function between inner monads to work with the transformed (outer) monad.
-For example ```liftIO``` map a function that returns an ```IO``` monad to return an IO monad encapsulated in other monad transformers.
-
-[Haskell lift](https://wiki.haskell.org/Lifting)
 
 ## Comparison
 
