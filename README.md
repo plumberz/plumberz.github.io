@@ -392,6 +392,21 @@ Among them:
 If you are not familiar with haskell's theoretical concepts this chapter offer a brief recap of the main ones to grasp in order to understand the components of these libraries.
 The concepts are presented in an intuitive rather than formal way. For a more formal explanation you can read the referred resources.
 
+#### Kinds
+"In type theory, a kind is the type of a type constructor or, less commonly, the type of a higher-order type operator. A kind system is essentially a simply typed lambda calculus 'one level up,' endowed with a primitive type, denoted * and called 'type', which is the kind of any (monomorphic) data type" [cit.](https://wiki.haskell.org/Kind)
+Ordinary types, also called monotypes or nullary type constructors, have kind \*. Higher order type constructors have kinds of the form P -> Q, where P and Q are kinds.
+```haskell
+Int :: *
+Maybe :: * -> *
+Maybe Bool :: *
+a -> a :: *
+[] :: * -> *
+(->) :: * -> * -> *
+```
+In Haskell 98, * is the only inhabited kind, that is, all values have types of kind "\*".
+
+In shorter terms kinds define the signatures of type constructors, indicating what they need to build a "\*" (aka concrete) kind, very much in the same way as functions signatures show what the functions can take and what it will produce. Kinds can be curried too: ```Either :: * -> * -> *``` can be partially applied ```Either String :: * -> *``` and then again to obtain a concrete kind ```Either String Int :: *```.
+
 #### Monad
 Monads represents computations that can wrap values and potentially have side effects.
 For example reading a character from a file is a computation with side effect (```IO Char``` monad).
