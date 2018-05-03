@@ -281,11 +281,11 @@ Applying a monad transformer to a monad returns a monad, as we already said, so 
 
 ## Tubes
 
-This report considers tubes-2.1.1.0, a stream programming library based on the concept of duality, inspired by Pipes.
+This report considers [tubes-2.1.1.0](https://hackage.haskell.org/package/tubes), a stream programming library based on the concept of duality, inspired by Pipes.
 
 ### Intuition
 
-Tubes bring stream programming capabilities into haskell. In particular it respond to the need of process in a series of stages (pipelining) a possibly infinite stream of elements. This is useful when the sequence of elements can't be hold in memory, but must be processed in chunks. Stream programming push this concept to its limit by having chunk of exactly one element.
+Tubes bring stream programming capabilities into haskell. In particular it respond to the need of process in a series of stages (pipelining) a possibly infinite stream of elements. This is useful when the sequence of elements can't be hold in memory, but must be processed in chunks. 
 
 In the pipeline analogy, each stage is a Tube, and the composition of Tubes (itself a Tube) is the final pipeline. Tube has 3 specializations: Source, Channel, Sink. As suggested by names, a Tube usually is the composition of a Source (generate elements), optionally some Channels (process / transform elements) and a Sink (simply process the element).
 
@@ -299,19 +299,22 @@ runTube $  -- compose and execute the Tube computation
 	>< pour display -- Sink that output strings to console
 ```
 
-(```><```) is the Tube composition operator.
+(```><```) is the Tube composition operator. It will be discussed in detail.
 ```map``` and ```filter``` are imported from ```Tubes.Util```.
 
 ### Types
 
-The library is based on 2 main types: the tube monad, and the dual pump comonad.
+The library is based on 2 main types: the **tube monad transformer**, and the dual **pump comonad transformer**.
 
 #### Tube
 A tube represent a computation that can **await** elements from upstream and **yield** elements to downstream.
 ```haskell
-Tube a b m r
+-- Defined in ‘Tubes.Core’ 
+type Tube a b = FreeT (TubeF a b) -- Tube a b m r
+yield :: Monad m => b -> Tube a b m () 
+await :: Monad m => Tube a b m a
 ```
-A general tube awaits elements of type **a**, yields elements of type **b**, performing a computation **m** that return a result of type **r**.
+A general [tube](https://hackage.haskell.org/package/tubes-2.1.1.0/docs/Tubes-Core.html#t:Tube) awaits elements of type **a**, yields elements of type **b**, performing a computation **m** that return a result of type **r**.
 
 The library provide 3 **subclasses** of tube type: **source**, **channel**, **sink**.
 Each subclass has a different method to obtain the corresponding Tube:
@@ -319,25 +322,44 @@ Each subclass has a different method to obtain the corresponding Tube:
 - ```tune```: Tube from Channel
 - ```pour```: Tube from Sink
 
+
 ![recap](tubes_recap.png)
 
 Tubes can be composed using the (```><```) operator, to obtain a new tube.
-
-Is possible to obtain a monad ```m r``` from a ```Tube () () m r``` using the ```runTube``` function, or get a value from a tube that yield data with the ```reduce :: Monad m => (b -> a -> b) -> b -> Tube () a m () -> m b``` function.  
+```
+-- Defined in `Tubes.Core`
+(><)
+    :: Monad m
+    => Tube a b m r
+    -> Tube b c m r
+    -> Tube a c m r
+-- E.g:
+each [1..10] >< map (*2) >< pour display
+-- 2 4 6 8 10 12 14 16 18 20
+```
+Note that the **composition works at the level of Tubes**, but not between its specialization. 
+For example it is not possible to compose a Source and a Channel, but it is necessary to get the corresponding Tube (using ```sample``` and ```tune``` respectively), and only then apply the composition.
 
 ![reduce](tubes_reduce.png)
 
+Is possible to obtain a monad ```m r``` from a ```Tube () () m r``` using the ```runTube``` function, or get a value from a tube that yield data with the ```reduce :: Monad m => (b -> a -> b) -> b -> Tube () a m () -> m b``` function.  
 
 #### Source
 ```haskell
-Source (m :: * -> *) a = Source {sample :: Tube () a m ()}
+-- Defined in `Tubes.Source`
+newtype Source m a = Source {
+    sample :: Tube () a m ()
+}
 ```
 Sources are a specialization of Tube that can only ```yield``` elements downstream.
 The ```sample``` function is used to get the ```Tube``` corresponding to a ```Source```.
 
 ![merge](tubes_merge.png)
 
-A source can be synchronously merged with another using the ```merge :: Monad m => Source m a -> Source m a -> Source m a```. In this case the resoulting Source will yield elements from the two Sources (alternating), untill they both have no elements left.
+```
+merge :: Monad m => Source m a -> Source m a -> Source m a 
+```
+A source can be merged with another using the ```merge``` function. This merge can be seen as an alternated "zip" of the two sources. The resoulting Source will yield elements from the two Sources (alternating), untill they both have no elements left.
 
 ```haskell
 charsFromFile :: MonadIO m => Handle -> Source m Char
@@ -349,19 +371,34 @@ charsFromFile handle = Source $ do
         sample $ charsFromFile handle
 ```
 
-This example shows how to build a Source that yields characters read from a file handle.
+This example shows a function ```charsFromFile``` that takes a [file handle](https://hackage.haskell.org/package/base-4.11.1.0/docs/System-IO.html#g:2) and return a Source that yields characters read from that handle.
 
 #### Sink
 ```haskell
-Sink (m :: * -> *) a = Sink {pour :: Tube a () m ()}
+-- Defined in `Tubes.Sink`
+newtype Sink m a = Sink {
+    pour :: Tube a () m ()
+}
 ```
 In symmetry with the ```Source```, ```Sink``` is a specialization of ```Tube``` that can only await elements.
 ```Pour``` is used to obtain the corresponding ```Tube``` from a ```Sink```.
-Since ```Sink``` is both a ```Contravariant``` functor and a ```Semigroup```, it is possible to map transformations over its inputs or be merged together beside another ```Sink```.
+
+```
+-- Defined in `Tubes.Sink`
+instance Monad m => Contravariant (Sink m) where
+    contramap f snk = Sink $ map f >< (pour snk)
+instance Monad m => Semigroup (Sink m a) where
+    s1 <> s2 = divide (\x -> (x,x)) s1 s2
+```
+
+```Sink``` is both a ```Contravariant``` functor and a ```Semigroup```. Thus it is possible to map transformations over its inputs, using Contravariant's ```contramap``` [method](https://hackage.haskell.org/package/contravariant-1.4.1/docs/Data-Functor-Contravariant.html#v:contramap). It is also possible to merged a Sink together beside another ```Sink```, using the Semigroup's ```<>``` [append operator](https://hackage.haskell.org/package/semigroups).
 
 #### Channel
 ```haskell
-Channel (m :: * -> *) a b = Channel {tune :: Tube a b m ()}
+-- Defined in `Tubes.Channel`
+newtype Channel m a b = Channel {
+    tune :: Tube a b m ()
+}
 ```
 ```Channel``` is a Tube that can convert values, while performing a monadic computation.
 While it can independently ```await``` and ```yield``` elements, it can be considered as an ```Arrow``` if it yields exactly once after awaiting.
@@ -405,7 +442,10 @@ This Tube can be thought to perform the preprocessing part of a map-reduce compu
 
 #### Pump
 ```haskell
-(Comonad w) => Pump b a w r
+-- Defined in `Tubes.Core`
+type Pump b a = CofreeT (PumpF b a) -- (Comonad w) => Pump b a w r 
+send :: Comonad w => b -> Pump a b w r -> Pump a b w r 
+recv :: Comonad w => Pump a b w r -> (a, Pump a b w r) 
 ```
 Pumps are the dual of Tubes, they can ```send``` elements of type ```b``` and ```recv``` (receive) elements of type ```a```.
 Pumps are internally used in order to run Tubes (```runTube```), since Pump's ```send``` and ```recv``` match with Tube's ```await``` and ```yield```.
