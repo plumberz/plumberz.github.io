@@ -465,48 +465,9 @@ Among them:
 
 ## Comparison
 
-#### Types
-
-Since Tubes is inspired by Pipes, many base types and functions of the library have a corresponding type in the other library.
-
-| *Pipes*  	| *Tubes*                                            	|
-|----------	|----------------------------------------------------	|
-| ```Proxy```    	| ```Tube``` 	|
-| ```Producer``` 	| ```Source```                                             	|
-| ```Pipe```     	| ```Channel```                                            	|
-| ```Consumer``` 	| ```Sink```                                               	|
-| ```Effect```   	| ```Tube () () m r```                                     	|
-
-Note that unlike ```Proxy```, ```Tube``` is mono-directional.
-
-#### Communication
-
-The communication between Proxy / Tube use the very same primitives ```yield``` and ```await``` with the same semantic.
-
-#### Composition
-
-Composition in Pipes can be performed both between Proxies and between Producers/Pipes/Consumers thanks to Rank-N ghc extension, via the ```>->``` operator.
-
-On the contrary, in Tubes the ```><``` operator can compose only matching Tubes. Thus is necessary to obtain the corresponding Tube from a Source/Channel/Sink via ```sample```/```tune```/```pour``` before applying the composition.
-
-![tubes_recap](tubes_recap.png)
-
-So the Pipes equivalent of this picture would not need the transformation between subclasses and Proxy, but would apply the composition operator directly between Producer/Pipe/Consumer thanks to Rank-N ghc extension.
-
-#### Prelude functions
-
-Both the libraries reimplement the basic operations on lists (```map```, ```filter```, ...) containted in ```Prelude``` in terms of ```Proxy``` / ```Tube```. Pipes define these functions in ```Pipes.Prelude```, Tubes inside ```Tubes.Util```.
-
 #### Batch use case
 
 In order to show the similarities in the concepts and the small differences in these two libraries, we implemented a Map-Reduce flavoured batch word count using both of them, taking advantage of the stream programming paradigm offered which allowed us to adopt a dataflow approach to the problem, pipelining the steps of the computation.
-
-Notice that:
-- Both the programs read a textual test file, pass that to a Produce / Source that read chucks of data, get the words, map the words to lowercase, then reduce the outputs of the pipeline incrementing the value of a map corresponding to that word.
-
-- Both the programs use the ```map``` and the ```fold```/```reduce``` utils, that has a similar syntax and semantic with respect to the Prelude version.
-
-- The composition follows a similar linear structure: ```... >-> ... >-> ...``` (Pipes) vs ```... >< ... >< ...``` (Tubes).
 
 ##### Pipes
 Code can be run by ```stack runghc code/wordcount_mapReduce.hs```  that will read input from [tets-text.txt](code/test-text.txt) and will output something like  ```[("per",2),("sociis",1),("vivamus",2),("mus",1),("montes",1),("torquent",1),("augue",11),("integer",2),("f ...```.
@@ -595,6 +556,53 @@ main = do
     where
         countWords m word = Map.insertWith (+) word 1 m -- increment the map value for the corresponding word, or initialize word ounter to 1
 ```
+
+Notice that:
+- Both the programs read a textual test file, pass that to a Produce / Source that read chucks of data, get the words, map the words to lowercase, then reduce the outputs of the pipeline incrementing the value of a map corresponding to that word.
+
+- Both the programs use the ```map``` and the ```fold```/```reduce``` utils, that has a similar syntax and semantic with respect to the Prelude version.
+
+- The composition follows a similar linear structure: ```... >-> ... >-> ...``` (Pipes) vs ```... >< ... >< ...``` (Tubes).
+
+Is possible to grasp some correspondences between the two libraries. These covers syntax, types, communication primitives and helper functions. However some differences start to emerge when comparing the composition mechanism of these two libraries.
+All these aspects are now analyzed. 
+
+#### Types
+
+Since Tubes is inspired by Pipes, many base types and functions of the library have a corresponding type in the other library.
+
+| *Pipes*  	| *Tubes*                                            	|
+|----------	|----------------------------------------------------	|
+| ```Proxy```    	| ```Tube``` 	|
+| ```Producer``` 	| ```Source```                                             	|
+| ```Pipe```     	| ```Channel```                                            	|
+| ```Consumer``` 	| ```Sink```                                               	|
+| ```Effect```   	| ```Tube () () m r```                                     	|
+
+Note that unlike ```Proxy```, ```Tube``` is mono-directional.
+
+#### Communication
+
+The communication between Proxy / Tube use the very same primitives ```yield``` and ```await``` with the same semantics.
+
+#### Prelude functions
+
+Both the libraries reimplement the basic operations on lists (```map```, ```filter```, ...) containted in ```Prelude``` in terms of ```Proxy``` / ```Tube```. Pipes define these functions in ```Pipes.Prelude```, Tubes inside ```Tubes.Util```.
+
+#### Composition
+
+Composition in Pipes can be performed both between Proxies and between Producers/Pipes/Consumers thanks to Rank-N ghc extension, via the ```>->``` operator.
+
+On the contrary, in Tubes the ```><``` operator can compose only matching Tubes. Thus is necessary to obtain the corresponding Tube from a Source/Channel/Sink via ```sample```/```tune```/```pour``` before applying the composition.
+
+![tubes_recap](tubes_recap.png)
+
+So the Pipes equivalent of this picture would not need the transformation between subclasses and Proxy, but would apply the composition operator directly between Producer/Pipe/Consumer.
+
+This is the result of two different design choices. On one hand Pipes defines Producer/Pipes/Consumer in terms of Proxy, and this type is instance of many useful types. On the other hand Source/Channel/Sink just have a getter for the corresponding Tube, and each of them (Source/Channel/Sink) is instance of different types.
+
+Nevertheless this semantic difference does not impact in the usage / syntax of the two programs. It is just a matter of adding a getter in front of every element in the composition, from the programmer's point of view. 
+
 
 ## Windowed Wordcount with Pipes
 **How to run the code is explained [here](code/HOW_TO_RUN.md)**
