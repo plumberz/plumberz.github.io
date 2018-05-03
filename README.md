@@ -180,7 +180,7 @@ Representing a Proxy consuming *a* from upstream and producing *b* downstream, m
 
 For each of these types synonyms, except for Pipe, also a *polymorphic version* is defined, using the [Rank-N types](https://wiki.haskell.org/Rank-N_types) GHC extension:
 ```haskell
-type Effect' (m :: * -> *) r = forall x' x y' y. Proxy xb ' x y' y m r
+type Effect' (m :: * -> *) r = forall x' x y' y. Proxy x' x y' y m r
 type Producer' b (m :: * -> *) r = forall x' x. Proxy x' x () b m r
 type Consumer' a (m :: * -> *) r = forall y' y. Proxy () a y' y m r
 ```
@@ -624,7 +624,7 @@ main = do
 
 Firstly in the large ecosystem of libraries surrounding Pipes we found [pipes-concurrent](https://hackage.haskell.org/package/pipes-concurrency-2.0.9/docs/Pipes-Concurrent.html#v:recv), which provides "_Asynchronous communication between pipes_" and makes possible the adoption of an actor model approach, through the spawning of mailboxes and pieces of pipes which communicate through these as separate actors.
 
-Therefore the [first attempt](code/Wordcount.hs) was to try to implement our wordcount using **pipes-concurrent** the result was quite promising at first, by passing manually strings to standard input everything seemed to work properly, but after a while we noticed that the concurrent  access to the shared mailbox used to communicate between the two pieces of the pipe in certain cases didn't behave as expected, resulting in the **window never closing** if the input stream kept coming at a really **high rate*** (e.g. "**yes | stack runghc code/Wordcount.hs**"), breaking the chosen reporting policy, not reporting at all.
+Therefore the [first attempt](code/Wordcount.hs) was to try to implement our wordcount using **pipes-concurrent** the result was quite promising at first, by passing manually strings to standard input everything seemed to work properly, but after a while we noticed that the concurrent  access to the shared mailbox used to communicate between the two pieces of the pipe in certain cases didn't behave as expected, resulting in the **window never closing** if the input stream kept coming at a really **high rate*** (e.g. "**yes| stack runghc code/Wordcount.hs**"), breaking the chosen reporting policy, not reporting at all.
 
 We were feeding into the mailbox a _Maybe Char_, so that when the downstream pipe received a _Nothing_ by a timer running on a different thread and was interpreted as a signal of the closing of the window.
 
